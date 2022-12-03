@@ -1,0 +1,6 @@
+*~
+*.pyc
+*.py#
+doc
+archive
+__pycache__
