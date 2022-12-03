@@ -89,7 +89,7 @@ class guiMain(tk.Tk):
         self._plot_widget = guiPlot(self, self._selected_station, self.years, self.np_climate_data, figsize = (1000, 400))
         self._plot_widget.grid(row = 0, column = 0, rowspan = 1, columnspan = 7)
 
-        self.bind("<Map>", self.on_map)
+        # self.bind("<Map>", self.on_map)
         self.bind("<Configure>", self.on_configure)
         # self.bind("<KeyPress>", self.on_key)
         self.bind("<Motion>", self.on_motion)
@@ -271,12 +271,12 @@ class guiMain(tk.Tk):
     #     print('guiMain.on_YearMenu {} {}'.format(self._ModeMenu.selectedItem, xItem))
     #     self._plot_widget.update(self._ModeMenu.selectedItem, xItem)
 
-    def on_map(self, event):
-        """ Initialize the _width attribute and maintain dict of mappedWidgets.
-        """
+    # def on_map(self, event):
+    #     """ Initialize the _width attribute and maintain dict of mappedWidgets.
+    #     """
         # if event.widget == self._plot_widget.tk_canvas:
         #     print('guiMain Map       {:16} [{}]'.format(event.widget.winfo_name(), event.widget.winfo_id()))
-        pass
+        # pass
 
 
     def on_configure(self, event):
