@@ -101,7 +101,7 @@ class guiMain(tk.Tk):
 
         # --- Buttons & Selection Menus ---
         self._info_text = tk.StringVar()                # Information Widget
-        self._tk_info = ttk.Label(self, textvariable = self._info_text, width = 32)
+        self._tk_info = ttk.Label(self, textvariable = self._info_text, width = 40)
         self._tk_info.grid(row = 1, column = 0, sticky='nsw')
 
         self._YearMenu = None
@@ -127,12 +127,13 @@ class guiMain(tk.Tk):
         self._update_info_text()
 
     def _update_info_text(self):
-        cursor_xyz = self._plot_widget.cursor
-        # print('here {}'.format(cursor_xyz))
-        # return
+        cursor_info = self._plot_widget.cursor
+        cursor_date = cursor_info.pop('date')
+        cursor_extra = '  |  '.join([f'{x}: {y}' for x,y in cursor_info.items()])
+        self._info_text.set('{}  |  '.format(cursor_date) + cursor_extra)
 
-        datestr = '{}-{}-{}'.format(*cursor_xyz[0])
-        self._info_text.set('{} :   dayVal: {:.2f}   maVal: {:.2f}'.format(datestr, *cursor_xyz[1:]))
+        # datestr = '{}-{}-{}'.format(*cursor_xyz[0])
+        # self._info_text.set('{} :   dayVal: {:.2f}   maVal: {:.2f}'.format(datestr, *cursor_xyz[1:]))
 
     def on_cfgOption(self, value):
         if value >= 0 and value <= 365:
