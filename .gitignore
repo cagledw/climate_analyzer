@@ -2,6 +2,7 @@
 *.pyc
 *.db
 *.py#
+.idea
 doc
 archive
 __pycache__

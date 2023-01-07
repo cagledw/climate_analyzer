@@ -1,7 +1,6 @@
 """ A matplotlib derived class that 'acts' like a tkinter canvas Widget.
     The guiPlot constructor requires a tkinter 'parent' Widget and numpy 2D Structured Array.
 
-
     The guiPlot object generates an 3 Different Plots depending on its PLOT_TYPE: ALL_DOY, SNGL_DOY, HISTO
     Calls to the plot(type, arg1, ..) method will cause 1 of 3 plots to be generated.
     The guiPlot object maintains a lists of matplotlib graphics objects that are 'removed' prior
@@ -10,7 +9,6 @@
 from __future__ import annotations   # Fix Type Hint Problem
 
 from enum        import IntEnum
-from datetime    import date
 from calendar    import month_abbr
 from collections import namedtuple
 
@@ -22,10 +20,9 @@ import matplotlib as mpl
 import matplotlib.transforms as mpl_xforms
 
 from matplotlib.figure import Figure
-from matplotlib.axes._axes import Axes
 from matplotlib.collections import LineCollection
+from matplotlib.backends.backend_pdf import PdfPages
 from _mpl_tk import FigureCanvasTk
-from mpl_toolkits.axes_grid.inset_locator import (inset_axes, InsetPosition, mark_inset)
 
 pltcolor1 = 'dimgray'
 pltcolor2 = 'skyblue'
@@ -113,7 +110,6 @@ class guiPlot(FigureCanvasTk):
 
         return result_mean, result_stdev, result_ma
 
-
     @staticmethod
     def nice_scale(value):
         """ Return scale factor such that: 1.0 <= value * scale < 10.0
@@ -136,7 +132,7 @@ class guiPlot(FigureCanvasTk):
         return scale
 
     @staticmethod
-    def nice_grid(mintick, maxtick):
+    def nice_grid(mintick: int, maxtick):
         """ Calculate a nice grid spacing for the interval [mintick .. maxtick]
             Returns a list of equally spaced ints in the specified range.
             List always begins @ mintick but last value depends on grid spacing.
@@ -371,22 +367,24 @@ class guiPlot(FigureCanvasTk):
 
     @property
     def cursor(self):
-        """ Returns a dict {'date' : x, + mode specific keys,val pairs}
+        """ Returns a current cursor position as a dict {'date' : x, + mode specific keys,val pairs}
+            The matplotlib object _verLine is queried to get the x-value of the current cursor
         """
         rtnDict = {}
         makey = f'{self._ma_numdays}pt_ma'
         tkeys = ['tmin', 'tmax']
 
+        dayenum = self._dayenum
+        yrenum = self._yrenum
+
         data_x = self.cursorx
         if self._type == PLOT_TYPE.SNGL_DOY:  # data_x enumerated year
-            dayenum = self._dayenum
             yrenum = 0 if data_x < 0 else data_x
             yrenum = len(self._yrList) - 1 if yrenum >= len(self._yrList) else yrenum
             mdy = (self._yrList[yrenum], *dayInt2MMDD(self._dayenum))
 
         elif self._type == PLOT_TYPE.ALL_DOY:  # data_x enumerated day
             dayenum = data_x
-            yrenum = self._yrenum
             mdy = (self._yrList[self._yrenum], *dayInt2MMDD(data_x))
 
         elif self._type == PLOT_TYPE.HISTO:  # data_x enumerated day
@@ -626,6 +624,7 @@ class guiPlot(FigureCanvasTk):
         """ Generate a Series of Lines for [tmin:tmax] for single Month/Day.
             X-Axis is the Year of each [tmin:tmax] Line.
         """
+        # tmin:tmax Line Width Calculation
         figsize_points = self.figsize_inches[0] * 72
         xaxis_limits = self._ax0.get_xlim()
         xaxis_range = xaxis_limits[1] - xaxis_limits[0]
@@ -674,35 +673,45 @@ class guiPlot(FigureCanvasTk):
 
 
     def do_sngldoy_prcp(self, day):
+        """ Add matplotlib 'Artists' to Primary Axis to display 2X bar plots with legend
+            All 3 'Artist' objects are added to alldoy_artlist so they can be removed latter.
+        """
 
         # Primary Axis
         num_pts = self._np_climate_data.shape[0]
         x = np.arange(num_pts)
         y = self._np_climate_data[:, day][self._obs]
-        self._sngldoy_artlist.append(self._ax0.scatter(x,y,c = 'lightsteelblue',
-                                                       marker = 's',
-                                                       label = 'not averaged'))
+        y2 = self._np_ma_byday[:, day]
 
-        ymax = np.round_(np.max(y), 1)
-        yticks, ydelta = guiPlot.nice_grid(0, ymax)
+        prcp_bar = self._ax0.bar(x, y2, color = pltcolor2, label = f'{self._ma_numdays}-pt mov_avg', width = 0.8, zorder = 5)
+        self._alldoy_artlist.append(prcp_bar)
+
+        prcp_bar = self._ax0.bar(x, y, color = pltcolor1, label = 'SnglDay', width = .3, zorder = 10)
+        self._alldoy_artlist.append(prcp_bar)
+
+        prcp_legend = self._ax0.legend(bbox_to_anchor = (0.9, 1.0), loc = 'upper left')
+        self._alldoy_artlist.append(prcp_legend)
+
+        ymax = np.round_(np.nanmax(y), 1)
+
+        # yticks, ydelta = guiPlot.nice_grid(0, ymax)
+        # yticks += [yticks[-1] + ydelta]
+
+        # self._ax0.set_ylim((0, yticks[-1]))
+        # self._ax0.set_yticks(yticks)
+
+        maxy = np.max(self._np_ma_byday)
+        yscale = guiPlot.nice_scale(maxy)
+        ylim = round(10.0 * yscale * maxy) / (10.0 * yscale)
+
+        yticks, ydelta = guiPlot.nice_grid(0, ylim)
         yticks += [yticks[-1] + ydelta]
 
         self._ax0.set_ylim((0, yticks[-1]))
         self._ax0.set_yticks(yticks)
 
-        # Twin Axis
-        y2 = self._np_ma_byday[:, day]
-        self._sngldoy_artlist.append(self._ax0.scatter(x, y2, c = 'blue',
-                                                       marker = 'o',
-                                                       label = f'{self._ma_numdays}-pt mov_avg'))
-
-        self._sngldoy_artlist.append(self._ax0.legend(bbox_to_anchor = (0.9, 1.0),
-                                                      loc = 'upper left'))
-
-        maxy = np.max(self._np_ma_byday)
-        yscale = guiPlot.nice_scale(maxy)
-        ylim = round(10.0 * yscale * maxy) / (10.0 * yscale)
-        self._ax0.set_ylim([0, ylim])
+        # self._ax0.set_ylim([0, ylim])
+        print('do_sngldoy_prcp {:.2f} {:.2f}'.format(ymax, yticks[-1]))
 
         xlim = self._ax0.get_xlim()
         xscale = 1.0 / (xlim[1] - xlim[0])
@@ -712,12 +721,13 @@ class guiPlot(FigureCanvasTk):
         ma_mean = np.mean(y2)
         ma_stdev = np.std(y2)
 
-        self._sngldoy_artlist.append(self._ax0.axhline(ma_mean, xmin = xstart * xscale,
-                                                       xmax = xend * xscale,
-                                                       color = 'blue', linestyle = '--'))
+        prcp_line = self._ax0.axhline(ma_mean, xmin = xstart * xscale, \
+                                      xmax = xend * xscale, color = 'blue', linestyle = '--')
+        self._sngldoy_artlist.append(prcp_line)
 
-        self._sngldoy_artlist.append(self._ax0.text(xlim[0], ma_mean,
-                                                    r'$\mu = {:.2f}$'.format(ma_mean), fontsize = 7, color = 'blue'))
+        prcp_info = r'$\mu$' + '\n = {:.2f}'.format(ma_mean)
+        prcp_text = self._ax0.text(xlim[0], ma_mean, prcp_info, fontsize = 7, color = 'blue')
+        self._sngldoy_artlist.append(prcp_text)
 
         if self._vertLine: self._vertLine.set_xdata(self._yrenum)
 
@@ -797,3 +807,9 @@ class guiPlot(FigureCanvasTk):
 
         self._alldoy_artlist.append(self._ax0.legend(bbox_to_anchor = (0.0, 1.07), loc = 'upper left'))
         self._alldoy_artlist.append(self._ax0twin.legend(bbox_to_anchor = (0.9, 1.07), loc = 'upper left'))
+
+    def write_pdf(self, fname):
+        pdfObj = PdfPages(fname)
+        pdfObj.savefig(self._figure)
+        pdfObj.close()
+        print('write pdf')

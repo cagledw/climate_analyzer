@@ -14,11 +14,10 @@ import tkinter as tk
 import tkinter.ttk as ttk
 
 from noaa        import get_noaa_id, get_dataset_v1
-
 from guiStyle    import guiStyle
 from guiPlot     import guiPlot, dayInt2MMDD, dayInt2Label, PLOT_TYPE
 from dbCoupler   import dbCoupler
-
+
 class guiMain(tk.Tk):
     """ A tk Application (i.e. Main/Root Window) to display Climate Data and its Analysis
         Weather data is read from a sqlite DB.  A list of DB File Paths is passed to __init__.
@@ -27,8 +26,12 @@ class guiMain(tk.Tk):
           - yrList[]           : years (e.g. [2000, 20001, ...], matches yr_enum in 2D Array
           - 2D Structured Array: [yr_enum, day_enum][obs] : year x day x observation
 
+        Gui is structured as 2 Rows or tkinter Widgets:
+          - row-0 : imported guiPlot Widget, colspan must be set to match # of col in row-1
+          - row-1 : c0: info, c1: ArgSelFrame, c5: ObserMenu, c6: TypeButton
+
     """
-    def __init__(self, dbList, pos_tuple):
+    def __init__(self, dbList: list[str], pos_tuple):
 
         self.dbList = dbList
         self._posXY = pos_tuple
@@ -75,19 +78,19 @@ class guiMain(tk.Tk):
 
                         else:
                             for _val in update_vals:
+                                print(_val._asdict())
+
                                 info = ', '.join([f'{_k}:{_v}' for _k, _v in _val._asdict().items() if _k != 'date'])
                                 print('    Add {}: '.format(_val.date) + info)
                             self.db.add_climate_data(str(chkyear), update_vals)
 
         # Initial Gui Setup
         super().__init__()
+        print('tkinter Version: {}'.format(self.tk.call('info', 'patchlevel')))
+
         self.geometry('+{}+{}'.format(*self._posXY))
         self.title("Climate Data Analyzer")
         self._style = guiStyle(self)  #Style for all Widgets!
-
-        # --- Plot Widget ---
-        self._plot_widget = guiPlot(self, self._selected_station, self.years, self.np_climate_data, figsize = (1000, 400))
-        self._plot_widget.grid(row = 0, column = 0, rowspan = 1, columnspan = 7)
 
         # self.bind("<Map>", self.on_map)
         self.bind("<Configure>", self.on_configure)
@@ -97,30 +100,35 @@ class guiMain(tk.Tk):
 
         self.rowconfigure(0, weight=1)      # Expand Widgets in Height
         self.columnconfigure(0, weight=1)   # Expand Widgets in Width
-        print('tkinter Version: {}'.format(self.tk.call('info', 'patchlevel')))
+        # Row-0, Column-0 : Plot Widget
+        self._plot_widget = guiPlot(self, self._selected_station, self.years, self.np_climate_data, figsize = (1000, 400))
+        self._plot_widget.grid(row = 0, column = 0, rowspan = 1, columnspan = 7)
 
-        # --- Buttons & Selection Menus ---
-        self._info_text = tk.StringVar()                # Information Widget
+
+        # Column-0, Information Widget
+        self._info_text = tk.StringVar()                                          # Col-0, Information Widget
         self._tk_info = ttk.Label(self, textvariable = self._info_text, width = 40)
         self._tk_info.grid(row = 1, column = 0, sticky='nsw')
 
-        self._YearMenu = None
-        self._DayEntry = None
-
-        self.cd_names = [x.upper() for x in self.np_climate_data.dtype.names]  # Numpy Structured Array Field Names
-        self._ObserMenu = tkOptionMenu(self, self.cd_names, self.cd_names.index('PRCP'), self.on_ObserMenu)
-        self._ObserMenu.grid(row = 1, column = 5, sticky='e')
+        # Column-1, PDF Button
+        self._pdfButton = ttk.Button(self, text = 'PDF', style = 'red.TButton', width = 5, command = self.on_pdfButton)
+        self._pdfButton.grid(row = 1, column = 1, sticky = 'nse')
 
         self._TypeButton = tkToggleButton(self, PLOT_TYPE, self.on_TypeButton)
         self._TypeButton.grid(row = 1, column = 6, sticky='nse')
         self._TypeButton.enum = PLOT_TYPE.ALL_DOY
 
+        # Column-2,  ArgSelFrame
         self._ArgSelFrame = tkArgSelFrame(self, self._TypeButton.enum, self.on_ArgSel, self.on_ArgLimits)
-        self._ArgSelFrame.grid(row = 1, column = 1)
+        self._ArgSelFrame.grid(row = 1, column = 2)
         self._ArgSelFrame.argtype = PLOT_TYPE.ALL_DOY
 
         init_yrenum = len(self.years) - 1
         self._ArgSelFrame.argvalue = self.years[init_yrenum]
+        self.cd_names = [x.upper() for x in self.np_climate_data.dtype.names]  # Numpy Structured Array Field Names
+        self._ObserMenu = tkOptionMenu(self, self.cd_names, self.cd_names.index('PRCP'), self.on_ObserMenu)
+        self._ObserMenu.grid(row = 1, column = 5, sticky='e')
+
         # print(self._ArgSelFrame.argvalue)
 
         self._plot_widget.plot(self._TypeButton.enum, self._ObserMenu.selectedItem, init_yrenum)
@@ -135,12 +143,12 @@ class guiMain(tk.Tk):
         # datestr = '{}-{}-{}'.format(*cursor_xyz[0])
         # self._info_text.set('{} :   dayVal: {:.2f}   maVal: {:.2f}'.format(datestr, *cursor_xyz[1:]))
 
-    def on_cfgOption(self, value):
-        if value >= 0 and value <= 365:
-            self._info_text.set(dayInt2Label(value))
-            self._plot_widget.plot(self._TypeButton.enum, self._ObserMenu.selectedItem, self._DayEntry.value)
-        else:
-            print('Bad')
+    # def on_cfgOption(self, value):
+    #     if value >= 0 and value <= 365:
+    #         self._info_text.set(dayInt2Label(value))
+    #         self._plot_widget.plot(self._TypeButton.enum, self._ObserMenu.selectedItem, self._DayEntry.value)
+    #     else:
+    #         print('Bad')
 
     def on_button1_press(self, event):
         if event.widget == self._plot_widget.tkwidget:
@@ -160,6 +168,10 @@ class guiMain(tk.Tk):
             else:
                 raise ValueError('on_button1_press Bad TypeButton')
 
+
+    def on_pdfButton(self):
+        print('pdf', self._pdfButton.state())
+        self._plot_widget.write_pdf(f'{self._selected_station}.pdf')
 
     def on_motion(self, event):
         """ Motion Events for ALL Widgets, 'event' provides cursor position in 'Display' Space
@@ -262,22 +274,6 @@ class guiMain(tk.Tk):
 
         print('guiMain.on_xItem {} {}'.format(xItem, self._ObserMenu.selectedItem))
         self._plot_widget.plot(self._TypeButton.enum, self._ObserMenu.selectedItem, plotarg)
-
-    # def on_YearMenu(self, xItem):
-    #     """ Activated on changes to SelectionFrame and displays the appropriate Frame.
-    #         If the current mode doesn't match the ActiveFrame it is hidden via grid_remove()
-    #         and the appropriate frame is created (if necessary) and then displayed.
-    #     """
-
-    #     print('guiMain.on_YearMenu {} {}'.format(self._ModeMenu.selectedItem, xItem))
-    #     self._plot_widget.update(self._ModeMenu.selectedItem, xItem)
-
-    # def on_map(self, event):
-    #     """ Initialize the _width attribute and maintain dict of mappedWidgets.
-    #     """
-        # if event.widget == self._plot_widget.tk_canvas:
-        #     print('guiMain Map       {:16} [{}]'.format(event.widget.winfo_name(), event.widget.winfo_id()))
-        # pass
 
 
     def on_configure(self, event):
@@ -382,7 +378,8 @@ class tkArgSelFrame(ttk.Frame):
     def on_ArgEntry(self, value):
         """ Currently Do Nothing - Use <Return>
         """
-        print('tkArgSelFrame.on_ArgEntry {}'.format(value))
+        pass
+        # print('tkArgSelFrame.on_ArgEntry {}'.format(value))
 
     def on_return(self, event):
         newval = self._ArgEntry.value
