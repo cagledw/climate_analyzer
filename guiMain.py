@@ -1,10 +1,7 @@
 """
-  A tkinter GUI Class tailored for displaying Climate Data and its Analysis.
-
-
+A tkinter GUI Class
 """
-
-from os   import path
+from os import path
 from datetime import date
 from itertools import groupby, accumulate
 from collections import defaultdict
@@ -13,25 +10,30 @@ import numpy as np
 import tkinter as tk
 import tkinter.ttk as ttk
 
-from noaa        import get_noaa_id, get_dataset_v1
-from guiStyle    import guiStyle
-from guiPlot     import guiPlot, dayInt2MMDD, dayInt2Label, PLOT_TYPE
-from dbCoupler   import dbCoupler
+from noaa import get_noaa_id, get_dataset_v1
+from dbCoupler import dbCoupler
+from guiPlot import guiPlot, dayInt2MMDD, dayInt2Label, PLOT_TYPE
+from guiStyle import guiStyle
 
 class guiMain(tk.Tk):
-    """ A tk Application (i.e. Main/Root Window) to display Climate Data and its Analysis
-        Weather data is read from a sqlite DB.  A list of DB File Paths is passed to __init__.
-
-        The data retrieved from sqlite DB is:
-          - yrList[]           : years (e.g. [2000, 20001, ...], matches yr_enum in 2D Array
-          - 2D Structured Array: [yr_enum, day_enum][obs] : year x day x observation
-
-        Gui is structured as 2 Rows or tkinter Widgets:
-          - row-0 : imported guiPlot Widget, colspan must be set to match # of col in row-1
-          - row-1 : c0: info, c1: ArgSelFrame, c5: ObserMenu, c6: TypeButton
+    """A tk Application (i.e. Main/Root Window)
 
     """
     def __init__(self, dbList: list[str], pos_tuple):
+        """ A tk Application (i.e. Main/Root Window) to display Climate Data and its Analysis
+            Weather data is read from a sqlite DB.  A list of DB File Paths is passed to __init__.
+
+            The data retrieved from sqlite DB is:
+              - yrList[]           : years (e.g. [2000, 20001, ...], matches yr_enum in 2D Array
+              - 2D Structured Array: [yr_enum, day_enum][obs] : year x day x observation
+
+            Gui is structured as 2 Rows or tkinter Widgets:
+              - row-0 : imported guiPlot Widget, colspan must be set to match # of col in row-1
+              - row-1 : c0: info, c1: ArgSelFrame, c5: ObserMenu, c6: TypeButton
+
+        """
+        super().__init__()
+        print('tkinter Version: {}'.format(self.tk.call('info', 'patchlevel')))
 
         self.dbList = dbList
         self._posXY = pos_tuple
@@ -45,9 +47,14 @@ class guiMain(tk.Tk):
 
         self.years, self.np_climate_data, missing_data = self.db.rd_climate_data()
 
-        # Examine climate_data for void (i.e. missing, all fields == nan) data
-        # Create a list of tuples: [(all_nan : bool, num_consecutive : int)]
         # Attempt Download of Missing Data from NOAA & Update DB if available
+        #   Each sub-array of climate data has exactly 366 elements
+        #   non-leap-year sub-array's are expected to be void for Feb-29 and are ignored.
+        #   Only the two most recent years are checked.
+        #
+        # First, create 'void' list of isnan flags for each day.
+        # Then identify days that are all nan (void)
+        dlYears = [date.today().year - x for x in [1, 0]]
         for _yrenum in range(self.np_climate_data.shape[0]):
             chkyear = self.years[_yrenum]
 
@@ -64,32 +71,32 @@ class guiMain(tk.Tk):
                     if dayMMDD == (2,29) and isnan_grpsize[_grpidx][1] == 1 and not self.db.is_leap_year(chkyear):
                         continue
 
-                    grp_size = isnan_grpsize[_grpidx]
                     grp_dayenum = isnan_dayenum[_grpidx]
+                    print(chkyear, _isnan_grp[1], grp_dayenum)
                     print('  Missing Data: {} {} + {} days'.format(chkyear,
                                                                    dayInt2Label(grp_dayenum),
-                                                                   grp_size[1] - 1))
+                                                                   _isnan_grp[1]))
 
-                    if chkyear == date.today().year and _grpidx == len(isnan_grpsize) - 1:
-                        update_day = date(chkyear, *dayInt2MMDD(grp_dayenum))
+                    if chkyear in dlYears:
+                        MMDD = dayInt2MMDD(grp_dayenum)
+                        update_day = date(chkyear, *MMDD)
+                        print(chkyear, update_day)
                         update_vals = get_dataset_v1(station_id, update_day)
-                        if not update_vals:
-                            print('  No Updates for {}'.format(update_day))
+                        self.db.add_climate_data(str(chkyear), update_vals)
+                    # if chkyear == date.today().year and _grpidx == len(isnan_grpsize) - 1:
+                    #     if not update_vals:
+                    #         print('  No Updates for {}'.format(update_day))
+                    #
+                    #     else:
+                    #         for _val in update_vals:
+                    #             print(_val._asdict())
+                    #
+                    #             info = ', '.join([f'{_k}:{_v}' for _k, _v in _val._asdict().items() if _k != 'date'])
+                    #             print('    Add {}: '.format(_val.date) + info)
 
-                        else:
-                            for _val in update_vals:
-                                print(_val._asdict())
-
-                                info = ', '.join([f'{_k}:{_v}' for _k, _v in _val._asdict().items() if _k != 'date'])
-                                print('    Add {}: '.format(_val.date) + info)
-                            self.db.add_climate_data(str(chkyear), update_vals)
-
-        # Initial Gui Setup
-        super().__init__()
-        print('tkinter Version: {}'.format(self.tk.call('info', 'patchlevel')))
-
-        self.geometry('+{}+{}'.format(*self._posXY))
+        #Initial Gui Setup
         self.title("Climate Data Analyzer")
+        self.geometry('+{}+{}'.format(*self._posXY))
         self._style = guiStyle(self)  #Style for all Widgets!
 
         # self.bind("<Map>", self.on_map)
@@ -103,7 +110,6 @@ class guiMain(tk.Tk):
         # Row-0, Column-0 : Plot Widget
         self._plot_widget = guiPlot(self, self._selected_station, self.years, self.np_climate_data, figsize = (1000, 400))
         self._plot_widget.grid(row = 0, column = 0, rowspan = 1, columnspan = 7)
-
 
         # Column-0, Information Widget
         self._info_text = tk.StringVar()                                          # Col-0, Information Widget
@@ -300,7 +306,7 @@ class guiMain(tk.Tk):
     def mainloop(self):
         tk.mainloop()
 
-
+
 class tkArgSelFrame(ttk.Frame):
     """ A Container (i.e. Frame) Class that changes gui widgets depending on its argType.
 
@@ -388,7 +394,7 @@ class tkArgSelFrame(ttk.Frame):
         # print('Return {}'.format(event))
 
 
-
+
 class tkIntEntry(ttk.Entry):
     """ requires 2 columns
     """
@@ -436,7 +442,7 @@ class tkIntEntry(ttk.Entry):
 
         return True
 
-
+
 class tkToggleButton(ttk.Button):
     """ Encapsulates a Button that represents an enum.  Selecting Button cycles enum.
         Each enum value as a text and numeric value.  Numeric value ranges 1..n (No Zero!)
@@ -477,7 +483,7 @@ class tkToggleButton(ttk.Button):
         if self._event_callback:
             self._event_callback(self._CurrentEnum)
 
-
+
 class tkOptionMenu(ttk.OptionMenu):
     """ Encapsulates GUI Elements AND a timedelta (days) object and the callback
         method is actived on a change.
@@ -511,8 +517,3 @@ class tkOptionMenu(ttk.OptionMenu):
         if self.event_callback:
             self.event_callback(val)
 
-
-
-if __name__ == '__main__':
-    gui = guiMain();
-    gui.mainloop()

@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 from collections import namedtuple
 from haversine import haversine, Unit
 
-from dbCoupler   import dbCoupler, DBTYPE_CDO
+from dbCoupler import dbCoupler, DBTYPE_CDO
 
 CDO_TOKEN = 'vOQSRjlXjSwPyEbbAOFCOphAoAaYQgcM'
 # CFE_HEADER = {
@@ -125,11 +125,11 @@ def get_dataset_v1(station_id, start):
 
     done = False
     while not done:
-        payload = {'dataset' : 'daily-summaries',
-                   'dataTypes' : ','.join(hcdd_flds),
+        payload = {'dataset'  : 'daily-summaries',
+                   'dataTypes': ','.join(hcdd_flds),
                    'stations' : station,
-                   'startDate' : start.isoformat(),
-                   'endDate'   : date(start.year, 12, 31).isoformat(),
+                   'startDate': start.isoformat(),
+                   'endDate'  : date(start.year, 12, 31).isoformat(),
                    'units' : 'standard'}
 
         res = requests.get(noaa_url, params = payload, headers = {"Token": CDO_TOKEN})

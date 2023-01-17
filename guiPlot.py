@@ -18,6 +18,7 @@ import tkinter as tk
 import tkinter.ttk as ttk
 import matplotlib as mpl
 import matplotlib.transforms as mpl_xforms
+import _mpl_tk
 
 from matplotlib.figure import Figure
 from matplotlib.collections import LineCollection
@@ -256,6 +257,7 @@ class guiPlot(FigureCanvasTk):
         # Special Variables to Manage Position XTick Labels
         self._tick_offset = mpl_xforms.ScaledTranslation(-20/72, 0, self._figure.dpi_scale_trans)
         self._xtick_xform_list = []
+        print(_mpl_tk.__file__)
 
     def grid(self, row, column, rowspan, columnspan):
         self._tk_canvas.grid(row = row, column = 0,
