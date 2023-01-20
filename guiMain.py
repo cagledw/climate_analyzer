@@ -41,58 +41,9 @@ class guiMain(tk.Tk):
         self._selected_station = self._stations[0]
         station_id = get_noaa_id(self._selected_station)
 
-        self.db = dbCoupler()
-        print(self.dbList[0])
-        self.db.open(self.dbList[0])
-
-        self.years, self.np_climate_data, missing_data = self.db.rd_climate_data()
-
-        # Attempt Download of Missing Data from NOAA & Update DB if available
-        #   Each sub-array of climate data has exactly 366 elements
-        #   non-leap-year sub-array's are expected to be void for Feb-29 and are ignored.
-        #   Only the two most recent years are checked.
-        #
-        # First, create 'void' list of isnan flags for each day.
-        # Then identify days that are all nan (void)
-        dlYears = [date.today().year - x for x in [1, 0]]
-        for _yrenum in range(self.np_climate_data.shape[0]):
-            chkyear = self.years[_yrenum]
-
-            void = [np.all([np.isnan(x) for x in y]) for y in self.np_climate_data[_yrenum, :]]
-            isnan_grpsize = [(_k, sum(1 for _ in _v)) for _k, _v in groupby(void)]
-            isnan_dayenum = [0] + list(accumulate([x[1] for x in isnan_grpsize]))
-            assert isnan_dayenum[-1] == self.np_climate_data.shape[1]   # the sum of all grp elements should == 366
-
-            for _grpidx, _isnan_grp in enumerate(isnan_grpsize):
-                dayenum = isnan_dayenum[_grpidx]
-                dayMMDD = dayInt2MMDD(dayenum)
-
-                if _isnan_grp[0]:
-                    if dayMMDD == (2,29) and isnan_grpsize[_grpidx][1] == 1 and not self.db.is_leap_year(chkyear):
-                        continue
-
-                    grp_dayenum = isnan_dayenum[_grpidx]
-                    print(chkyear, _isnan_grp[1], grp_dayenum)
-                    print('  Missing Data: {} {} + {} days'.format(chkyear,
-                                                                   dayInt2Label(grp_dayenum),
-                                                                   _isnan_grp[1]))
-
-                    if chkyear in dlYears:
-                        MMDD = dayInt2MMDD(grp_dayenum)
-                        update_day = date(chkyear, *MMDD)
-                        print(chkyear, update_day)
-                        update_vals = get_dataset_v1(station_id, update_day)
-                        self.db.add_climate_data(str(chkyear), update_vals)
-                    # if chkyear == date.today().year and _grpidx == len(isnan_grpsize) - 1:
-                    #     if not update_vals:
-                    #         print('  No Updates for {}'.format(update_day))
-                    #
-                    #     else:
-                    #         for _val in update_vals:
-                    #             print(_val._asdict())
-                    #
-                    #             info = ', '.join([f'{_k}:{_v}' for _k, _v in _val._asdict().items() if _k != 'date'])
-                    #             print('    Add {}: '.format(_val.date) + info)
+        self.dbMgr = dbCoupler()
+        self.dbMgr.open(dbList[0])
+        self.yrList, self.np_climate_data, missing_data = self.dbMgr.rd_climate_data()
 
         #Initial Gui Setup
         self.title("Climate Data Analyzer")
@@ -108,7 +59,7 @@ class guiMain(tk.Tk):
         self.rowconfigure(0, weight=1)      # Expand Widgets in Height
         self.columnconfigure(0, weight=1)   # Expand Widgets in Width
         # Row-0, Column-0 : Plot Widget
-        self._plot_widget = guiPlot(self, self._selected_station, self.years, self.np_climate_data, figsize = (1000, 400))
+        self._plot_widget = guiPlot(self, self._selected_station, self.yrList, self.np_climate_data, figsize = (1000, 400))
         self._plot_widget.grid(row = 0, column = 0, rowspan = 1, columnspan = 7)
 
         # Column-0, Information Widget
@@ -129,8 +80,8 @@ class guiMain(tk.Tk):
         self._ArgSelFrame.grid(row = 1, column = 2)
         self._ArgSelFrame.argtype = PLOT_TYPE.ALL_DOY
 
-        init_yrenum = len(self.years) - 1
-        self._ArgSelFrame.argvalue = self.years[init_yrenum]
+        init_yrenum = len(self.yrList) - 1
+        self._ArgSelFrame.argvalue = self.yrList[init_yrenum]
         self.cd_names = [x.upper() for x in self.np_climate_data.dtype.names]  # Numpy Structured Array Field Names
         self._ObserMenu = tkOptionMenu(self, self.cd_names, self.cd_names.index('PRCP'), self.on_ObserMenu)
         self._ObserMenu.grid(row = 1, column = 5, sticky='e')
@@ -244,7 +195,7 @@ class guiMain(tk.Tk):
 
         elif argType == PLOT_TYPE.ALL_DOY:
             try:
-                plot_arg = self.years.index(argVal)
+                plot_arg = self.yrList.index(argVal)
                 if plot_arg < 0 or plot_arg >= self.np_climate_data.shape[0]:
                     return False
             except:
@@ -259,7 +210,7 @@ class guiMain(tk.Tk):
             return (0, self.np_climate_data.shape[1] - 1)
 
         elif argType == PLOT_TYPE.ALL_DOY:
-            return (self.years[0], self.years[self.np_climate_data.shape[0] - 1])
+            return (self.yrList[0], self.yrList[self.np_climate_data.shape[0] - 1])
 
         elif argType == PLOT_TYPE.HISTO:
             return (0, self.np_climate_data.shape[1] - 1)

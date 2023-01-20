@@ -210,7 +210,7 @@ class guiPlot(FigureCanvasTk):
         self._obs_max = None
         self._ma_numdays = 15       # Moving Avg Window Size
 
-        self._dayenum  = 0         # Valid if type == SNGL_DOY
+        self._dayenum = 0         # Valid if type == SNGL_DOY
         self._yrenum = np_climate_data.shape[0] - 1
 
         # A Dict to match plot function to plot type
@@ -530,7 +530,7 @@ class guiPlot(FigureCanvasTk):
         self._ax0.grid(which = 'major', axis = 'both', color = gridcolor)
         self._ax0.xaxis.grid(True)
 
-        if self._type == None:  # Reconfigure Axes, Remove Twin
+        if self._type is None:  # Reconfigure Axes, Remove Twin
             self._ax0twin.set_axis_off()
 
             xtendby = 4
@@ -769,6 +769,8 @@ class guiPlot(FigureCanvasTk):
             self._alldoy_artlist.append(lc_mean)
 
     def do_alldoy_prcp(self, year):
+        """ Generate a 1-Year Plot of Precipitation by adding MPL Artists to ax0 & ax0twin
+        """
         self._ax0.set_title(f'{self._station} {self._yrList[year]}  -  Rain Precipitation')
         # self._ax0twin.yaxis.grid(visible = True, color = gridcolor)
 
