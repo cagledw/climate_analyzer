@@ -3,6 +3,7 @@
 *.db
 *.py#
 .idea
+.swp
 doc
 archive
 __pycache__
