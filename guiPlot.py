@@ -277,46 +277,49 @@ class guiPlot(FigureCanvasTk):
             raise ValueError
 
         dlist = {}
-        # startDD = self._daysum[mstart]
+        dshape = self._np_climate_data.shape
         for name in dnames:
             if xorigin.dayenum == 0:
-                np_data = self._np_climate_data[xorigin.yrenum][name]
-                try:
-                    extra_before = self._np_climate_data[xorigin.yrenum-1][name][-ma_winsize_2:]
-                except IndexError:
-                    extra_before = np.zeros(ma_winsize_2, dtype=np_data.dtype)
+                datayr2 = None
+                prefix_yr = xorigin.yrenum-1
+                prefix_slice = np.arange(dshape[1]-ma_winsize_2, dshape[1])
 
-                try:
-                    extra_after = self._np_climate_data[xorigin.yrenum-1][name][-ma_winsize_2:]
-                except IndexError:
-                    extra_after = np.zeros(ma_winsize_2, dtype=np_data.dtype)
-
+                postfix_yr = xorigin.yrenum+1
+                postfix_slice = np.arange(ma_winsize_2)
             else:
-                np_data = np.concatenate((self._np_climate_data[xorigin.yrenum][name][xorigin.dayenum:],
-                                          self._np_climate_data[xorigin.yrenum+1][name][:xorigin.dayenum]))
-                try:
-                    extra_before = self._np_climate_data[xorigin.yrenum][name][xorigin.dayenum-ma_winsize_2:xorigin.dayenum]
-                except IndexError:
-                    extra_before = np.zeros(ma_winsize_2, dtype=np_data.dtype)
+                datayr2 = xorigin.yrenum+1
+                prefix_yr = xorigin.yrenum
+                prefix_slice = np.arange(xorigin.dayenum - ma_winsize_2, xorigin.dayenum)
 
-                try:
-                    extra_after = self._np_climate_data[xorigin.yrenum+1][name][xorigin.dayenum:xorigin.dayenum + ma_winsize_2:]
-                except IndexError:
-                    extra_after = np.zeros(ma_winsize_2, dtype=np_data.dtype)
-            dlist[name] = np_data
+                postfix_yr = xorigin.yrenum+1
+                postfix_slice = np.arange(xorigin.dayenum, xorigin.dayenum + xorigin.dayenum)
+
+            d1 = self._np_climate_data[xorigin.yrenum][name][xorigin.dayenum:]
+            d2 = np.empty(0) if datayr2 is None else self._np_climate_data[datayr2][name][:xorigin.dayenum]
+            dlist[name] = np.concatenate((d1, d2))
+
+            try:
+                prefix_data = self._np_climate_data[prefix_yr][name][prefix_slice]
+            except IndexError:
+                prefix_data = np.zeros(ma_winsize_2, dtype=d1.dtype)
+
+            try:
+                postfix_data = self._np_climate_data[postfix_yr][name][-ma_winsize_2:]
+            except IndexError:
+                postfix_data = np.zeros(ma_winsize_2, dtype=d1.dtype)
 
             dlist[name + '_ltmean'] = np.concatenate((self._np_alldoy_mean[name][xorigin.dayenum:],
                                                        self._np_alldoy_mean[name][:xorigin.dayenum]))
 
             # Moving Average, Average, & Standard Deviation
-            extended_data = np.concatenate((extra_before, np_data, extra_after))
+            extended_data = np.concatenate((prefix_data, dlist[name], postfix_data))
             np.nan_to_num(extended_data, copy = False)
 
-            ma_vals = np.convolve(extended_data, np.ones(ma_winsize, dtype=np_data.dtype))/ma_winsize
+            ma_vals = np.convolve(extended_data, np.ones(ma_winsize, dtype=dlist[name].dtype))/ma_winsize
             dlist[name+'_ma'] = ma_vals[ma_winsize-1:-ma_winsize+1]
 
-            dlist[name+'_avg'] = np.nanmean(np_data)
-            dlist[name+'_stdev'] = np.nanstd(np_data)
+            # dlist[name+'_avg'] = np.nanmean(np_data)
+            # dlist[name+'_stdev'] = np.nanstd(np_data)
         return dlist
 
     def temp_byday(self, day) -> Tuple[list, Tuple[np.ndarray, np.ndarray]]:
