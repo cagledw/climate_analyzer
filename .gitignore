@@ -7,3 +7,4 @@
 doc
 archive
 __pycache__
+*.swp
