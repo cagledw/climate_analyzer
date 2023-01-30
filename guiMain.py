@@ -73,18 +73,18 @@ class guiMain(tk.Tk):
 
         self._TypeButton = tkToggleButton(self, PLOT_TYPE, self.on_TypeButton)
         self._TypeButton.grid(row = 1, column = 6, sticky='nse')
-        self._TypeButton.enum = PLOT_TYPE.ALL_DOY
+        self._TypeButton.enum = PLOT_TYPE.ALLDOY
 
         # Column-2,  ArgSelFrame
         self._ArgSelFrame = tkArgSelFrame(self, self._TypeButton.enum, self.on_ArgSel, self.on_ArgLimits)
-        self._ArgSelFrame.grid(row = 1, column = 2)
-        self._ArgSelFrame.argtype = PLOT_TYPE.ALL_DOY
+        self._ArgSelFrame.grid(row=1, column=2)
+        self._ArgSelFrame.argtype = PLOT_TYPE.ALLDOY
 
         init_yrenum = len(self.yrList) - 1
         self._ArgSelFrame.argvalue = self.yrList[init_yrenum]
         self.cd_names = [x.upper() for x in self.np_climate_data.dtype.names]  # Numpy Structured Array Field Names
         self._ObserMenu = tkOptionMenu(self, self.cd_names, self.cd_names.index('PRCP'), self.on_ObserMenu)
-        self._ObserMenu.grid(row = 1, column = 5, sticky='e')
+        self._ObserMenu.grid(row=1, column=5, sticky='e')
 
         # print(self._ArgSelFrame.argvalue)
 
@@ -125,7 +125,6 @@ class guiMain(tk.Tk):
             else:
                 raise ValueError('on_button1_press Bad TypeButton')
 
-
     def on_pdfButton(self):
         print('pdf', self._pdfButton.state())
         self._plot_widget.write_pdf(f'{self._selected_station}.pdf')
@@ -137,7 +136,7 @@ class guiMain(tk.Tk):
         if event.widget == self._plot_widget.tkwidget:
             cursor_xy = self._plot_widget.xform_tk_coords(event.x, event.y)
 
-            if self._ArgSelFrame.argtype == PLOT_TYPE.SNGL_DOY:
+            if self._ArgSelFrame.argtype == PLOT_TYPE.SNGLDOY:
                 size_x = self.np_climate_data.shape[0]
             else:
                 size_x = self.np_climate_data.shape[1]
@@ -155,11 +154,11 @@ class guiMain(tk.Tk):
 
             if argType != new_type:
 
-                if new_type == PLOT_TYPE.ALL_DOY:
+                if new_type == PLOT_TYPE.ALLDOY:
                     self._ArgSelFrame.argvalue = self._plot_widget.year
                     plot_arg = self._plot_widget.yearenum
 
-                elif new_type == PLOT_TYPE.SNGL_DOY:
+                elif new_type == PLOT_TYPE.SNGLDOY:
                     self._ArgSelFrame.argvalue = self._plot_widget.dayenum
                     plot_arg = self._plot_widget.dayenum
 
@@ -184,16 +183,15 @@ class guiMain(tk.Tk):
         except Exception as e:
             print(f'  on_TypeButton Exception {e}')
 
-
     def on_ArgSel(self, argType, argVal):
         """ Performs validation of new argVal
         """
-        if argType == PLOT_TYPE.SNGL_DOY or argType == PLOT_TYPE.HISTO:
+        if argType == PLOT_TYPE.SNGLDOY or argType == PLOT_TYPE.HISTO:
             plot_arg = argVal
             if plot_arg < 0 or plot_arg >= self.np_climate_data.shape[1]:
                 return False
 
-        elif argType == PLOT_TYPE.ALL_DOY:
+        elif argType == PLOT_TYPE.ALLDOY:
             try:
                 plot_arg = self.yrList.index(argVal)
                 if plot_arg < 0 or plot_arg >= self.np_climate_data.shape[0]:
@@ -206,10 +204,10 @@ class guiMain(tk.Tk):
         return True
 
     def on_ArgLimits(self, argType):
-        if argType == PLOT_TYPE.SNGL_DOY:
+        if argType == PLOT_TYPE.SNGLDOY:
             return (0, self.np_climate_data.shape[1] - 1)
 
-        elif argType == PLOT_TYPE.ALL_DOY:
+        elif argType == PLOT_TYPE.ALLDOY:
             return (self.yrList[0], self.yrList[self.np_climate_data.shape[0] - 1])
 
         elif argType == PLOT_TYPE.HISTO:
@@ -220,10 +218,10 @@ class guiMain(tk.Tk):
             If the current mode doesn't match the ActiveFrame it is hidden via grid_remove()
             and the appropriate frame is created (if necessary) and then displayed.
         """
-        if self._TypeButton.enum == PLOT_TYPE.SNGL_DOY:
+        if self._TypeButton.enum == PLOT_TYPE.SNGLDOY:
             plotarg = self._plot_widget.dayenum
 
-        elif self._TypeButton.enum == PLOT_TYPE.ALL_DOY:
+        elif self._TypeButton.enum == PLOT_TYPE.ALLDOY:
             plotarg = self._plot_widget.yearenum
 
         elif self._TypeButton.enum == PLOT_TYPE.HISTO:
@@ -231,7 +229,6 @@ class guiMain(tk.Tk):
 
         print('guiMain.on_xItem {} {}'.format(xItem, self._ObserMenu.selectedItem))
         self._plot_widget.plot(self._TypeButton.enum, self._ObserMenu.selectedItem, plotarg)
-
 
     def on_configure(self, event):
         """ Track Position of guiMain AND fix incorrect guiMain width changes made by MPL.
@@ -251,7 +248,6 @@ class guiMain(tk.Tk):
             #         self._configuredWidgets[_id] = _widget
             # #         print('*Configure [{:8}] {}'.format(_id, str(_widget)))
             # self.fix_geo()
-
 
 
     def mainloop(self):
@@ -308,7 +304,7 @@ class tkArgSelFrame(ttk.Frame):
         self.update_label()
 
     def update_label(self):
-        if self._argType == PLOT_TYPE.SNGL_DOY or self._argType == PLOT_TYPE.HISTO:
+        if self._argType == PLOT_TYPE.SNGLDOY or self._argType == PLOT_TYPE.HISTO:
             self._label_text.set('Day: ')
         else:
             self._label_text.set('Year: ')

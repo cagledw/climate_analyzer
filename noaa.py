@@ -131,8 +131,13 @@ def get_dataset_v1(station_id, start):
                    'startDate': start.isoformat(),
                    'endDate'  : date(start.year, 12, 31).isoformat(),
                    'units' : 'standard'}
+        try:
+            res = requests.get(noaa_url, params = payload, timeout = (5.0, 5.0),
+                           headers = {"Token": CDO_TOKEN})
+        except Exception as err:
+            print('Err {}'.format(err))
+            break
 
-        res = requests.get(noaa_url, params = payload, headers = {"Token": CDO_TOKEN})
         if res.status_code != 200:
             print('fail', res.status_code)
             break
