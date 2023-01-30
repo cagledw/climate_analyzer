@@ -62,13 +62,6 @@ class guiPlot(FigureCanvasTk):
     """
     canvas_dpi = 100
 
-    # @staticmethod
-    # def _calc_mean(npdict):
-    #     result_mean = {}
-    #     for _key, _npa in npdict.items():
-    #         result_mean[_key] = np.nanmean(_npa, axis = 0)
-    #     return result_mean
-
     @staticmethod
     def nice_scale(value):
         """ Return scale factor such that: 1.0 <= value * scale < 10.0
@@ -152,9 +145,8 @@ class guiPlot(FigureCanvasTk):
         self._station = station
         self._yrList = years
         self._np_climate_data = np_climate_data
-        self._np_alldoy_mean = {}
-        self.xticks_xformed = False
 
+        self._np_alldoy_mean = {}          # Mean Across all Years for each Day, shape = (366,)
         for _key in ['tmin', 'tmax', 'prcp']:
             self._np_alldoy_mean[_key] = np.nanmean(np_climate_data[:,:][_key], axis = 0)
 
@@ -185,17 +177,19 @@ class guiPlot(FigureCanvasTk):
         self._tk_canvas.columnconfigure(0, weight=1)
         self._tk_canvas.bind("<Configure>", self.on_configure)
 
-        self._ax0 = self._figure.add_subplot(111)    # Matplotlib Axis, twin is initially off!
-        self._ax0twin = self._ax0.twinx()
-        self._ax0twin.set_axis_off()
+        # self._ax0 = self._figure.add_subplot(111)    # Matplotlib Axis, twin is initially off!
+        # self._ax0twin = self._ax0.twinx()
+        # self._ax0twin.set_axis_off()
+        self._ax0 = None
+        self._ax0twin = None
         # self._ax0.set_axisbelow(True)
 
         self._alldoy_pts = []
         self._alldoy_mean = []
         self._sngldoy_mean = None
-        self._alldoy_artlist = []                    # Matplotlib Artists (i.e. graphic objects)
-        self._sngldoy_artlist = []
-        self._histo_artlist = []
+        # self._alldoy_artlist = []                    # Matplotlib Artists (i.e. graphic objects)
+        # self._sngldoy_artlist = []
+        # self._histo_artlist = []
 
         self._vertLine = None
         # self._horzLine = None
@@ -212,11 +206,11 @@ class guiPlot(FigureCanvasTk):
         # cstep = 1.0/len(self._yrList)
         # self._colors = [mpl.colormaps['brg'](x) for x in np.arange(0, 1.0, cstep)]
 
-        self.set_cursor(0)
+        # self.set_cursor(0)
         # Special Variables to Manage Position XTick Labels
         self._tick_offset = mpl_xforms.ScaledTranslation(-25/72, 0, self._figure.dpi_scale_trans)
-        self._xtick_xform_list = []
-        self._xtick_xform_dict = {}
+        # self._xtick_xform_list = []
+        # self._xtick_xform_dict = {}
         print(_mpl_tk.__file__)
 
     def grid(self, row, column, rowspan, columnspan):
@@ -337,25 +331,6 @@ class guiPlot(FigureCanvasTk):
             # ddict[name+'_stdev'] = np.nanstd(np_data)
         return ddict
 
-    # def temp_byday(self, day) -> Tuple[list, Tuple[np.ndarray, np.ndarray]]:
-    #     """ Return Climate Temperature Data for Single Day
-    #     """
-    #
-    #     tmin_data = self._np_climate_data[:, day]['tmin']
-    #     tmin_indicies = np.argwhere(~np.isnan(tmin_data))
-    #
-    #     tmax_data = self._np_climate_data[:, day]['tmax']
-    #     tmax_indicies = np.argwhere(~np.isnan(tmax_data))
-    #
-    #     if not np.array_equal(tmin_indicies, tmax_indicies):
-    #         raise ValueError
-    #
-    #     x = tmin_indicies.flatten()
-    #     ymin = tmin_data[x].flatten()
-    #     ymax = tmax_data[x].flatten()
-    #
-    #     return x, (ymin, ymax)
-
     @property
     def dayenum(self):
         """ Enumerated_Day (0..365) of current plot, includes Feb 29
@@ -382,11 +357,11 @@ class guiPlot(FigureCanvasTk):
     def plottype(self):
         return self._type
 
-    @property
-    def obs_max(self):
-        """ Returns a tuple ((yr, m, d), yval)
-        """
-        return self._obs_max
+    # @property
+    # def obs_max(self):
+    #     """ Returns a tuple ((yr, m, d), yval)
+    #     """
+    #     return self._obs_max
 
     @property
     def tkwidget(self):
@@ -407,7 +382,7 @@ class guiPlot(FigureCanvasTk):
     @property
     def cursorx(self):
         if self._vertLine is None:
-            return None
+            return 0
 
         return self._vertLine.get_xdata()
 
@@ -449,7 +424,6 @@ class guiPlot(FigureCanvasTk):
                     rtnDict[_key] = 'nan' if yval is np.nan else f'{yval:.2f}'
                 elif yval.ndim == 1:
                     rtnDict[_key] = ','.join(['{}'.format(int(x)) for x in yval])
-
 
         rtnDict['date'] = '-'.join([str(x) for x in mdy])
         return rtnDict
@@ -511,6 +485,12 @@ class guiPlot(FigureCanvasTk):
         self._vertLine.set_xdata(data_x)
         self._ax0.figure.canvas.draw_idle()
 
+    def showArtists(self, artist, depth):
+        # for _ in aList:
+        print(depth, '  ' * depth + str(artist))
+        for _child in artist.get_children():
+            self.showArtists(_child, depth + 1)
+
     def plot(self, plotType, arg1=None, arg2=None, arg3=None):
         """ Perform requested plot operation depending on plotType.
             There are 3 types of plot: [SNGL_DOY, ALL_DOY, HISTO]
@@ -518,24 +498,16 @@ class guiPlot(FigureCanvasTk):
         assert type(plotType) == PLOT_TYPE
         self._obs = arg1.lower()
 
-        # Remove existing Plot graphics (i.e. MPL Artists) & Plot Data
+        # Clear Existing graphic objects from plot, start with new MPL axis
         self._plty.clear()
-        for _list in [self._sngldoy_artlist, self._alldoy_artlist, self._histo_artlist]:
-            while _list:
-                _art = _list.pop()
-                _art.remove()
+        self._figure.clear()
+        self._vertLine = None
+        # for _child in self._figure.get_children():
+        #     self.showArtists(_child, 1)
 
-        # if self.xticks_xformed:
-        #     self._ax0.set_xticks(ticks=[], labels=[])
-        #     self.draw()
-        #     print('Removed!')
-        #
-        # xticks = self._ax0.get_xticklabels()
-        # print('Number of xticks = {}'.format(len(xticks)))
-
-        # for _label in xticks:
-        #     xform = _label.get_transform()
-        #     print(f'{_label._x:3}, {_label._text}, {xform.depth}')
+        self._ax0 = self._figure.add_subplot(111)    # Matplotlib Axis, twin is initially off!
+        self._ax0.tick_params(axis='both', labelsize = 7)  # can't find rcParams for this
+        self._ax0twin = None
 
         # Perform the requested Plot
         if self._obs in ['tmin', 'tmax']:
@@ -544,50 +516,18 @@ class guiPlot(FigureCanvasTk):
             plt_data = PLOT_DATA.RAIN
         else:
             raise ValueError
-        self.plot_funcs[plotType](plt_data, arg2)
+        if self._ax0 is not None:
+            self.plot_funcs[plotType](plt_data, arg2)
 
-        ####################################
-        # Apply MPL 'ScaledTranslation' to X-Axis Labels for ALLDOY Plots
-        # and remove them for all other Plots.  To remove an XFORM, apply
-        # an inverse.
-        xlabels = self._ax0.xaxis.get_majorticklabels()
-
-        xticks = self._ax0.get_xticklabels()
-        for _label in xticks:
-            xform = _label.get_transform()
-            print(f'{_label._x:3}, {_label._text}, {xform.depth}')
-
-        labels = self._ax0.get_xticklabels()
-        xformlbls = self._xtick_xform_dict.keys()
+        # Adjust X-Axis Tick Labels for ALLDOY Plots
         if plotType == PLOT_TYPE.ALLDOY:
+            self.set_cursor(self._yrenum)
+            labels = self._ax0.get_xticklabels()
             for _lblid, _lbl in enumerate(labels):
-                if _lblid not in xformlbls:
-                    self._xtick_xform_dict[_lblid] = _lbl.get_transform().depth
-                    _lbl.set_transform(_lbl.get_transform() + self._tick_offset)
-                    if _lblid > 5:
-                        break
-        else:
-            for _lblid, _lbl in enumerate(labels):
-                if _lblid in xformlbls:
-                    _lbl.set_transform(_lbl.get_transform() - self._tick_offset)
-                    del self._xtick_xform_dict[_lblid]
-            print('remove!')
-        #     for idx, label in enumerate(xlabels):
-        #         try:
-        #             inv_xform = self._xtick_xform_list[idx]
-        #         except:
-        #             print(type(label))
-        #             label.set_transform(label.get_transform() + self._tick_offset)
-        #             self._xtick_xform_list.append(self._tick_offset)
-        # else:
-        #     for idx, xform in enumerate(self._xtick_xform_list):
-        #         label = xlabels[idx]
-        #         label.set_transform(label.get_transform() - xform)
-        #     self._xtick_xform_list.clear()
-        ####################################
+                _lbl.set_transform(_lbl.get_transform() + self._tick_offset)
+        # if plotType == PLOT_TYPE.ALLDOY:
 
         self._type = plotType
-        self._ax0.tick_params(axis='both', labelsize = 7)  # can't find rcParams for this
         self.draw()
 
     def plot_sngldoy(self, plt_dtype, day):
@@ -603,17 +543,12 @@ class guiPlot(FigureCanvasTk):
         self._ax0.grid(which = 'major', axis = 'both', color = gridcolor)
         self._ax0.xaxis.grid(True)
 
-        # if self._type is None:  # Reconfigure Axes, Remove Twin
-        self._ax0twin.set_axis_off()
-
         # Configure X-Axis
         xtendby = 4
         xlabels = list(range(self._yrList[0] + -xtendby, self._yrList[0])) \
                   + self._yrList \
                   + list(range(self._yrList[-1] + 1, self._yrList[-1] + xtendby))
-
         xlocs = list(range(-xtendby, len(xlabels) -xtendby))
-
         assert len(xlabels) == len(xlocs)
 
         xtickLocs, xDelta = guiPlot.nice_grid(xlocs[0], xlocs[-1])
@@ -637,12 +572,12 @@ class guiPlot(FigureCanvasTk):
             for _name, _opt in spec.items():
                 y = self._plty[_name]
                 prcp_bar = self._ax0.bar(x, y, **_opt)
-                self._alldoy_artlist.append(prcp_bar)
+                # self._alldoy_artlist.append(prcp_bar)
                 ymin.append(0.0)
                 ymax.append(np.nanmax(y))
 
             prcp_legend = self._ax0.legend(bbox_to_anchor=(0.9, 1.0), loc='upper left')
-            self._alldoy_artlist.append(prcp_legend)
+            # self._alldoy_artlist.append(prcp_legend)
 
             xlim = self._ax0.get_xlim()
             xscale = 1.0 / (xlim[1] - xlim[0])
@@ -654,11 +589,11 @@ class guiPlot(FigureCanvasTk):
             mean_line = self._ax0.axhline(ma_mean, xmin=xstart * xscale, \
                                           xmax=xend * xscale, color='blue', linestyle='--')
 
-            self._sngldoy_artlist.append(mean_line)
+            # self._sngldoy_artlist.append(mean_line)
 
             prcp_info = r'$\mu$' + '\n = {:.2f}'.format(ma_mean)
             prcp_text = self._ax0.text(xlim[0], ma_mean, prcp_info, fontsize = 7, color = 'blue')
-            self._sngldoy_artlist.append(prcp_text)
+            # self._sngldoy_artlist.append(prcp_text)
 
         elif self._plty[obs_name].ndim == 2:
             figsize_points = self.figsize_inches[0] * 72
@@ -677,7 +612,7 @@ class guiPlot(FigureCanvasTk):
                 lineSegs = LineCollection(segs, **_opt)
 
                 self._ax0.add_collection(lineSegs)
-                self._sngldoy_artlist.append(lineSegs)
+                # self._sngldoy_artlist.append(lineSegs)
                 ymin.append(np.nanmin(p1))
                 ymax.append(np.nanmax(p2))
 
@@ -693,10 +628,10 @@ class guiPlot(FigureCanvasTk):
             for _avg, _color, _text in zip(val_list, color_list, text_list):
                 ymean_hline = self._ax0.axhline(_avg, xmin = x[0], xmax = x[-1],
                                                 color = _color, linestyle = '--')
-                self._sngldoy_artlist.append(ymean_hline)
+                # self._sngldoy_artlist.append(ymean_hline)
 
                 info_text = self._ax0.text(xaxis_limits[0], _avg, _text, color = _color, fontsize = 8, va = 'top')
-                self._sngldoy_artlist.append(info_text)
+                # self._sngldoy_artlist.append(info_text)
 
         ymin = np.min(ymin)
         ymax = np.max(ymax)
@@ -748,10 +683,9 @@ class guiPlot(FigureCanvasTk):
         ####################################
 
         if plt_dtype == PLOT_DATA.TEMP:
-            self._ax0twin.set_axis_off()
             self.do_alldoy_temp(yrenum, self._doy_xorigin)
         elif plt_dtype == PLOT_DATA.RAIN:
-            self._ax0twin.set_axis_on()
+            self._ax0twin = self._ax0.twinx()
             self.do_alldoy_prcp(yrenum, self._doy_xorigin)
         else:
             raise ValueError
@@ -795,7 +729,7 @@ class guiPlot(FigureCanvasTk):
         bin_high = np.max(x)
 
         values, bins, container = self._ax0.hist(x, range = (bin_low, bin_high), bins = 25, color = 'blue')
-        self._histo_artlist.append(container)
+        # self._histo_artlist.append(container)
 
         # Y-Axis Grid & Ticks
         ymax = np.round_(np.max(values), 1)
@@ -834,12 +768,12 @@ class guiPlot(FigureCanvasTk):
             for _name, _opt in spec.items():
                 y = self._plty[_name]
                 prcp_bar = self._ax0.bar(x, y, **_opt)
-                self._alldoy_artlist.append(prcp_bar)
+                # self._alldoy_artlist.append(prcp_bar)
                 ymin.append(0.0)
                 ymax.append(np.nanmax(y))
 
             prcp_legend = self._ax0.legend(bbox_to_anchor=(0.9, 1.0), loc='upper left')
-            self._alldoy_artlist.append(prcp_legend)
+            # self._alldoy_artlist.append(prcp_legend)
 
             xlim = self._ax0.get_xlim()
             xscale = 1.0 / (xlim[1] - xlim[0])
@@ -851,11 +785,11 @@ class guiPlot(FigureCanvasTk):
             mean_line = self._ax0.axhline(ma_mean, xmin=xstart * xscale, \
                                           xmax=xend * xscale, color='blue', linestyle='--')
 
-            self._sngldoy_artlist.append(mean_line)
+            # self._sngldoy_artlist.append(mean_line)
 
             prcp_info = r'$\mu$' + '\n = {:.2f}'.format(ma_mean)
             prcp_text = self._ax0.text(xlim[0], ma_mean, prcp_info, fontsize = 7, color = 'blue')
-            self._sngldoy_artlist.append(prcp_text)
+            # self._sngldoy_artlist.append(prcp_text)
 
         elif self._plty[obs_name].ndim == 2:
             figsize_points = self.figsize_inches[0] * 72
@@ -874,7 +808,7 @@ class guiPlot(FigureCanvasTk):
                 lineSegs = LineCollection(segs, **_opt)
 
                 self._ax0.add_collection(lineSegs)
-                self._sngldoy_artlist.append(lineSegs)
+                # self._sngldoy_artlist.append(lineSegs)
                 ymin.append(np.nanmin(p1))
                 ymax.append(np.nanmax(p2))
 
@@ -890,10 +824,10 @@ class guiPlot(FigureCanvasTk):
             for _avg, _color, _text in zip(val_list, color_list, text_list):
                 ymean_hline = self._ax0.axhline(_avg, xmin = x[0], xmax = x[-1],
                                                 color = _color, linestyle = '--')
-                self._sngldoy_artlist.append(ymean_hline)
+                # self._sngldoy_artlist.append(ymean_hline)
 
                 info_text = self._ax0.text(xaxis_limits[0], _avg, _text, color = _color, fontsize = 8, va = 'top')
-                self._sngldoy_artlist.append(info_text)
+                # self._sngldoy_artlist.append(info_text)
 
         ymin = np.min(ymin)
         ymax = np.max(ymax)
@@ -933,14 +867,14 @@ class guiPlot(FigureCanvasTk):
 
         lineSegs = LineCollection(segs, colors=[pltcolor1] * len(x))
         self._ax0.add_collection(lineSegs)
-        self._alldoy_artlist.append(lineSegs)
+        # self._alldoy_artlist.append(lineSegs)
 
         x = np.arange(366, dtype = int)
         colors = {'tmin' : 'navy', 'tmax' : 'firebrick'}
         for _k in colors.keys():
             y = self._np_alldoy_mean[_k]
             lc_mean = self._ax0.plot(x, y, color=colors[_k], linewidth = 0.5)[0]
-            self._alldoy_artlist.append(lc_mean)
+            # self._alldoy_artlist.append(lc_mean)
         # for _k, _npa in self._np_temperature_means.items():
         #     lc_mean = self._ax0.plot(x, _npa, color = colors[_k], linewidth = 0.5)[0]
         #     self._alldoy_artlist.append(lc_mean)
@@ -973,7 +907,8 @@ class guiPlot(FigureCanvasTk):
         y = self._plty['prcp'][goodIndx].flatten()
         x = goodIndx.flatten()
 
-        self._alldoy_artlist.append(self._ax0.bar(x, y, color = pltcolor1, label = 'SnglDay', zorder = 10))
+        bar = self._ax0.bar(x, y, color = pltcolor1, label = 'SnglDay', zorder = 10)
+        # self._alldoy_artlist.append(self._ax0.bar(x, y, color = pltcolor1, label = 'SnglDay', zorder = 10))
 
         ymax = np.round_(np.max(y), 1)
         yticks, ydelta = guiPlot.nice_grid(0, ymax)
@@ -986,13 +921,16 @@ class guiPlot(FigureCanvasTk):
         y = self._plty['prcp_ma']
         maxy1 = np.max(y)
         x = np.arange(len(y))
-        self._alldoy_artlist.append(self._ax0twin.plot(x, y, color = pltcolor2,
-                                                       label = f'{self._ma_numdays}day_ma')[0])
+        line = self._ax0twin.plot(x, y, color = pltcolor2, label = f'{self._ma_numdays}day_ma')[0]
+        # self._alldoy_artlist.append(self._ax0twin.plot(x, y, color = pltcolor2,
+        #                                                label = f'{self._ma_numdays}day_ma')[0])
         #
         y = self._plty['prcp_ltmean']
         maxy2 = np.max(y)
-        self._alldoy_artlist.append(self._ax0twin.plot(x, y, color = pltcolor3, linewidth = 0.5, linestyle = '-',
-                                                       label = f'{self._np_climate_data.shape[0]}-yr avg')[0])
+        # self._alldoy_artlist.append(self._ax0twin.plot(x, y, color = pltcolor3, linewidth = 0.5, linestyle = '-',
+        #                                                label = f'{self._np_climate_data.shape[0]}-yr avg')[0])
+        line = self._ax0twin.plot(x, y, color = pltcolor3, linewidth = 0.5, linestyle = '-',
+                                                       label = f'{self._np_climate_data.shape[0]}-yr avg')[0]
         maxy = np.max([maxy1, maxy2])
         yscale = guiPlot.nice_scale(maxy)
         ylim = np.ceil(10. * yscale * maxy) / (10. * yscale)
@@ -1001,8 +939,11 @@ class guiPlot(FigureCanvasTk):
         self._ax0twin.set_axis_on()
         self._ax0twin.tick_params(axis='both', labelsize = 7)  # can't find rcParams for this
 
-        self._alldoy_artlist.append(self._ax0.legend(bbox_to_anchor = (0.0, 1.07), loc = 'upper left'))
-        self._alldoy_artlist.append(self._ax0twin.legend(bbox_to_anchor = (0.9, 1.07), loc = 'upper left'))
+        # self._alldoy_artlist.append(self._ax0.legend(bbox_to_anchor = (0.0, 1.07), loc = 'upper left'))
+        # self._alldoy_artlist.append(self._ax0twin.legend(bbox_to_anchor = (0.9, 1.07), loc = 'upper left'))
+        #
+        legnd1 = self._ax0.legend(bbox_to_anchor = (0.0, 1.07), loc = 'upper left')
+        legnd2 = self._ax0twin.legend(bbox_to_anchor = (0.9, 1.07), loc = 'upper left')
 
         self._ax0.set_title(f'{self._station} {self._yrList[yrenum]}  -  Rain Precipitation')
 
