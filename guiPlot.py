@@ -13,7 +13,6 @@ from collections import namedtuple
 from datetime    import date, timedelta
 
 import re
-import warnings
 import numpy as np
 import tkinter as tk
 import tkinter.ttk as ttk
@@ -25,6 +24,7 @@ from matplotlib.figure import Figure
 from matplotlib.collections import LineCollection
 from matplotlib.backends.backend_pdf import PdfPages
 from _mpl_tk import FigureCanvasTk
+from ClimateDataObj import ClimateDataObj, PLOT_DATA
 
 pltcolor1 = 'dimgray'
 pltcolor2 = 'skyblue'
@@ -34,9 +34,9 @@ pltcolor5 = 'firebrick'
 gridcolor = 'whitesmoke'
 
 mm2days = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-mmlabels = [month_abbr[x] for x in range(1,13)]
+mmlabels = [month_abbr[x] for x in range(1, 13)]
 PLOT_TYPE = IntEnum('PLOT_TYPE', ['ALLDOY', 'SNGLDOY', 'HISTO'])
-PLOT_DATA = IntEnum('PLOT_DATA', ['RAIN', 'TEMP'])
+# PLOT_DATA = IntEnum('PLOT_DATA', ['RAIN', 'TEMP'])
 DATE_ENUM = namedtuple('DATE_ENUM',  ['yrenum', 'dayenum'])
 
 def dayInt2Label(day):
@@ -51,7 +51,7 @@ def dayInt2MMDD(day):
     while day > mm2days[month_int]-1:
         day -= mm2days[month_int]
         month_int += 1
-    return (month_int+1, day+1)
+    return month_int+1, day+1
 
 class guiPlot(FigureCanvasTk):
     """ NOT a tk Widget, instead a matplotlib derived object that embeds a tk.canvas.
@@ -70,26 +70,23 @@ class guiPlot(FigureCanvasTk):
         self._station = station
         self._yrList = years
         self._np_climate_data = np_climate_data
+        self._ClimateDataObj = ClimateDataObj(np_climate_data, years, station)
 
         self._np_alldoy_mean = {}          # Mean Across all Years for each Day, shape = (366,)
         for _key in ['tmin', 'tmax', 'prcp']:
-            self._np_alldoy_mean[_key] = np.nanmean(np_climate_data[:,:][_key], axis = 0)
-
-        # self._mean_byday = None
-        # self._stdev_byday = None
-        # self._ma_byday = None
+            self._np_alldoy_mean[_key] = np.nanmean(np_climate_data[:, :][_key], axis=0)
 
         self._obs = None             # Observation, np_climate_data field name
         self._type = None             # Type of Plot of PLOT_TYPE
-        self._obs_max = None
+        # self._obs_max = None
         self._ma_numdays = 15         # Moving Avg Window Size
 
         self._dayenum = 0             # Valid if type == SNGL_DOY
-        self._yrenum = np_climate_data.shape[0] - 1
+        self._yrenum = self._ClimateDataObj.num_years - 1
         self._doy_xorigin = DATE_ENUM(self._yrenum, 0)
         self._plty = {}
 
-        # A Dict to match plot function to plot type
+        # A Dict to match plot function to plot type, matches PLOT_TYPE to fcn name
         self.plot_funcs = {PLOT_TYPE[_type] : getattr(self, 'plot_' + _type.lower()) \
                            for _type in PLOT_TYPE.__members__}
 
@@ -116,147 +113,15 @@ class guiPlot(FigureCanvasTk):
         # cstep = 1.0/len(self._yrList)
         # self._colors = [mpl.colormaps['brg'](x) for x in np.arange(0, 1.0, cstep)]
 
-        # self.set_cursor(0)
         # Special Variables to Manage Position XTick Labels
         self._tick_offset = mpl_xforms.ScaledTranslation(-25/72, 0, self._figure.dpi_scale_trans)
-        # self._xtick_xform_list = []
-        # self._xtick_xform_dict = {}
         print(_mpl_tk.__file__)
 
-    def grid(self, row, column, rowspan, columnspan):
-        self._tk_canvas.grid(row = row, column = 0,
-                             columnspan = columnspan, rowspan = rowspan,
-                             sticky = 'nsew')
-
-    def grid_remove(self):
-        self._tk_canvas.grid_remove()
-
-    def on_configure(self, event):
-        """ Called anytime the canvas width, height changes
-        """
-        self.resize(event)
-
-    @property
-    def istemp(self):
-        """ Enumerated_Day (0..365) of current plot, includes Feb 29
-        """
-        return self._obs in ['tmax', 'tmin']
-
-    def sngldoy_data(self, dtype: PLOT_DATA, day: int) -> Dict[str, np.ndarray]:
-        """ Return data for Single Day Of Year Plot, (i.e. data focused on MM/DD across all years)
-            what data is returned depends on input (dtype, day) params.
-
-            Along with the 'raw' climate data, the avg value is also calculated and returned.
-            For each day [YR, MM, DD] the average is calculated from [YR, MM, [DD - winsz : DD + winsz + 1]]
-            Days early in the calendar year, the average calculation requires 'rolling back' to the
-            previous year.  Also, it is possible that the average calculation requires future
-            data that does not exist (i.e. all nan).  np.nanmean generates a RuntimeWarning for this.
-        """
-        if dtype == PLOT_DATA.TEMP:
-            dnames = ['tmin', 'tmax']
-        elif dtype == PLOT_DATA.RAIN:
-            dnames = ['prcp']
-        else:
-            raise ValueError
-
-        max_indx = self._np_climate_data.shape[1]
-        avg_indicies = [x if x < max_indx else x - max_idx for x in range(day - int(self._ma_numdays/2), day + int(self._ma_numdays/2) + 1)]
-
-        avg_indicies = np.asarray(avg_indicies, dtype=np.int32)
-        roll_indicies = np.asarray(np.where(avg_indicies < 0)).flatten()
-
-        obsList = []
-        avgList = []
-        for name in dnames:
-            obsList.append(self._np_climate_data[:, day][name])
-
-            sub_array = self._np_climate_data[:, avg_indicies][name]
-            if np.any(roll_indicies):
-                roll_array = np.roll(sub_array[:, roll_indicies], shift=1, axis=0)
-                sub_array[:, roll_indicies] = roll_array
-
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=RuntimeWarning)
-                obsMean = np.nanmean(sub_array, axis=1)
-            avgList.append(obsMean)
-
-        obs = obsList[0] if len(dnames) < 2 else np.stack(obsList, axis=1)
-        avg = avgList[0] if len(dnames) < 2 else np.stack(avgList, axis=1)
-
-        rtnDict = {dtype.name.lower():obs, 'avg': avg}
-        return rtnDict
-
-    def alldoy_data(self, dtype, xorigin) -> dict:
-        """ Return Climate Temperature for 12 Months, starting @ month mstart
-            X-Axis is always enumerated 0-365, but corresponding dates may be offset by _doy_xorigin
-
-        """
-        ma_winsize = self._ma_numdays
-        ma_winsize_2 = int(ma_winsize/2.)
-
-        if dtype == PLOT_DATA.TEMP:
-            dnames = ['tmin', 'tmax']
-            popt = {'tmin': {'color': pltcolor4, 'label': 'tmin', 'linewidth': 0.5},
-                    'tmax': {'color': pltcolor5, 'label': 'tmax', 'linewidth': 0.5}}
-            title = f'{self._station} {self._yrList[xorigin.yrenum]}  -  Tmin - Tmax'
-
-        elif dtype == PLOT_DATA.RAIN:
-            dnames = ['prcp']
-            title = f'{self._station} {self._yrList[xorigin.yrenum]}  -  Rain Precipitation'
-        else:
-            raise ValueError
-
-        ddict = {'dnames': dnames, 'ltmean': [], 'ma': [], 'title': title}
-        dshape = self._np_climate_data.shape
-        for name in dnames:
-            if xorigin.dayenum == 0:
-                datayr2 = None
-                prefix_yr = xorigin.yrenum-1
-                prefix_slice = np.arange(dshape[1]-ma_winsize_2, dshape[1])
-
-                postfix_yr = xorigin.yrenum+1
-                # postfix_slice = np.arange(ma_winsize_2)
-            else:
-                datayr2 = xorigin.yrenum+1
-                prefix_yr = xorigin.yrenum
-                prefix_slice = np.arange(xorigin.dayenum - ma_winsize_2, xorigin.dayenum)
-
-                postfix_yr = xorigin.yrenum+1
-                # postfix_slice = np.arange(xorigin.dayenum, xorigin.dayenum + xorigin.dayenum)
-
-            # Climate Data for each dname, adjusted for xorigin
-            d1 = self._np_climate_data[xorigin.yrenum][name][xorigin.dayenum:]
-            d2 = np.empty(0) if datayr2 is None else self._np_climate_data[datayr2][name][:xorigin.dayenum]
-            ddict[name] = np.concatenate((d1, d2))
-
-            # The mean value for each day across all years, adjusted for xorigin
-            np_data = np.concatenate((self._np_alldoy_mean[name][xorigin.dayenum:],
-                                      self._np_alldoy_mean[name][:xorigin.dayenum]))
-
-            ddict['ltmean'].append(np_data)
-            # ddict['ltmean'].append(np.concatenate((self._np_alldoy_mean[name][xorigin.dayenum:],
-            #                                        self._np_alldoy_mean[name][:xorigin.dayenum])))
-            #
-            # The N-Pt Moving average for each day, across the N/2 prceeding, following days
-            try:
-                prefix_data = self._np_climate_data[prefix_yr][name][prefix_slice]
-            except IndexError:
-                prefix_data = np.zeros(ma_winsize_2, dtype=d1.dtype)
-
-            try:
-                postfix_data = self._np_climate_data[postfix_yr][name][-ma_winsize_2:]
-            except IndexError:
-                postfix_data = np.zeros(ma_winsize_2, dtype=d1.dtype)
-
-            extended_data = np.concatenate((prefix_data, ddict[name], postfix_data))
-            np.nan_to_num(extended_data, copy=False)
-
-            ma_vals = np.convolve(extended_data, np.ones(ma_winsize, dtype=ddict[name].dtype))/ma_winsize
-            ddict['ma'].append(ma_vals[ma_winsize-1:-ma_winsize+1])
-
-            # ddict[name+'_avg'] = np.nanmean(np_data)
-            # ddict[name+'_stdev'] = np.nanstd(np_data)
-        return ddict
+    # @property
+    # def istemp(self):
+    #     """ Enumerated_Day (0..365) of current plot, includes Feb 29
+    #     """
+    #     return self._obs in ['tmax', 'tmin']
 
     @property
     def dayenum(self):
@@ -271,7 +136,7 @@ class guiPlot(FigureCanvasTk):
         return self._yrenum
 
     @yearenum.setter
-    def yearenum(self,val):
+    def yearenum(self, val):
         self._yrenum = val
 
     @property
@@ -283,12 +148,6 @@ class guiPlot(FigureCanvasTk):
     @property
     def plottype(self):
         return self._type
-
-    # @property
-    # def obs_max(self):
-    #     """ Returns a tuple ((yr, m, d), yval)
-    #     """
-    #     return self._obs_max
 
     @property
     def tkwidget(self):
@@ -307,25 +166,13 @@ class guiPlot(FigureCanvasTk):
         return self._figure.get_figwidth(), self._figure.get_figheight()
 
     @property
-    def cursorx(self):
-        if self._vertLine is None:
-            return 0
-
-        return self._vertLine.get_xdata()
-
-    @property
     def cursor(self):
         """ Returns a current cursor position as a dict {'date' : x, + mode specific keys,val pairs}
             The matplotlib object _verLine is queried to get the x-value of the current cursor
         """
-        rtnDict = {}
-        # makey = f'{self._ma_numdays}pt_ma'
-        # tkeys = ['tmin', 'tmax']
-        #
-        # dayenum = self._dayenum
-        # yrenum = self._yrenum
+        data_x = 0 if self._vertLine is None else self._vertLine.get_xdata()
 
-        data_x = self.cursorx
+        # Determine Date @ Cursor
         if self._type == PLOT_TYPE.SNGLDOY:  # data_x enumerated year
             yrenum = 0 if data_x < 0 else data_x
             yrenum = len(self._yrList) - 1 if yrenum >= len(self._yrList) else yrenum
@@ -340,24 +187,43 @@ class guiPlot(FigureCanvasTk):
             mdy = (self._yrList[yrenum], *dayInt2MMDD(dayenum))
 
         elif self._type == PLOT_TYPE.HISTO:  # data_x enumerated day
-            mdy = (self._yrList[self._yrenum], *dayInt2MMDD(data_x))
-            # yVal = 2.0
-            # zVal = 0.0
+            mdy = dayInt2MMDD(self._dayenum)
 
-        for _key, np_vals in self._plty.items():
-            if type(np_vals) is np.ndarray:
-                yval = np_vals[data_x]
-                if yval.ndim == 0:
-                    rtnDict[_key] = 'nan' if yval is np.nan else f'{yval:.2f}'
-                elif yval.ndim == 1:
-                    rtnDict[_key] = ','.join(['{}'.format(int(x)) for x in yval])
+        rtnDict = {'date':  '-'.join([str(x) for x in mdy])}
 
-        rtnDict['date'] = '-'.join([str(x) for x in mdy])
+        obs = self._plty['obs']
+        obs_x = obs[:,0].astype(np.int32)
+        try:
+            if self._type == PLOT_TYPE.HISTO:
+                bins = self._plty['bins']
+                y_text = f'{data_x:.2f}'
+            else:
+                x_index = np.nonzero(obs_x == data_x)[0][0]     # nonzero returns a tuple of ndarray
+                if obs.ndim == 2:
+                    y_value = obs[x_index][1]
+                    y_text = f'{y_value:.2f}'
+
+                elif obs.ndim == 3:
+                    y_value = obs[x_index][:, 1]
+                    y_text = ','.join([f'{int(y)}' for y in y_value])
+                else:
+                    print('bad2', data_x)
+        except IndexError:
+            y_text = ','.join(['nan' for x in self._plty['dnames']])
+
+        rtnDict[','.join(self._plty['dnames'])] = y_text
         return rtnDict
 
-    # @property
-    # def pltcolor(self) -> object:
-    #     return self._colors[self._yrenum]
+    def grid(self, row, column, rowspan, columnspan):
+        self._tk_canvas.grid(row=row, column=0, columnspan=columnspan, rowspan=rowspan, sticky='nsew')
+
+    def grid_remove(self):
+        self._tk_canvas.grid_remove()
+
+    def on_configure(self, event):
+        """ Called anytime the canvas width, height changes
+        """
+        self.resize(event)
 
     def on_button3(self, event):
         """ Right Button within OHLC Plot Area
@@ -376,32 +242,38 @@ class guiPlot(FigureCanvasTk):
         xform_coords = inv.transform((canvas_x, canvas_y))
 
         xlimits = self._ax0.get_xlim()
-        data_x = int(xlimits[0]) if xform_coords[0] < xlimits[0] \
-          else int(xlimits[1]) if xform_coords[0] > xlimits[1] \
-          else round(xform_coords[0])
+        data_x = int(
+            xlimits[0]) if xform_coords[0] < xlimits[0] \
+            else int(xlimits[1]) if xform_coords[0] > xlimits[1] \
+            else xform_coords[0] if self._type == PLOT_TYPE.HISTO \
+            else round(xform_coords[0])
 
         ylimits = self._ax0.get_ylim()
-        data_y = ylimits[0] if xform_coords[1] < ylimits[0] \
-          else ylimits[1] if xform_coords[1] > ylimits[1] \
-          else xform_coords[1]
+        data_y = \
+            ylimits[0] if xform_coords[1] < ylimits[0] \
+            else ylimits[1] if xform_coords[1] > ylimits[1] \
+            else xform_coords[1]
 
-        return (data_x, data_y)
+        # if self._type == PLOT_TYPE.HISTO:
+        #     print(tk_x, xform_coords[0], data_x, xlimits)
 
-    def set_marker(self, data_x, data_y = None):
+        return data_x, data_y
+
+    def set_marker(self, data_x, data_y=None):
         """ data_x = yrenum
         """
         print('guiPlot.set_marker {} {}'.format(data_x, self._yrList[data_x]))
         # print(len(self._np_climate_data[data_x, :][self._obs]))
-        print(len(self._np_climate_data[:, data_x][self._obs]))
+        # print(len(self._np_climate_data[:, data_x][self._obs]))
 
-        for _yr in range(self._np_climate_data.shape[0]):
+        for _yr in range(self._ClimateDataObj.num_years):
             daymin = self._dayenum - 2
             daymax = self._dayenum + 3
 
             if daymin < 0: daymin = 0
             if daymax > 365: xmax = 365
-            ma_vals = self._np_climate_data[_yr, daymin : daymax][self._obs]
-            pts = ', '.join([f'{x:.2f}' for x in ma_vals])
+            # ma_vals = self._np_climate_data[_yr, daymin : daymax][self._obs]
+            # pts = ', '.join([f'{x:.2f}' for x in ma_vals])
 
             print(self._yrList[_yr], ',', pts, ',{:.3f}'.format(np.mean(ma_vals)))
 
@@ -411,12 +283,6 @@ class guiPlot(FigureCanvasTk):
 
         self._vertLine.set_xdata(data_x)
         self._ax0.figure.canvas.draw_idle()
-
-    def showArtists(self, artist, depth):
-        # for _ in aList:
-        print(depth, '  ' * depth + str(artist))
-        for _child in artist.get_children():
-            self.showArtists(_child, depth + 1)
 
     def plot(self, plotType, arg1=None, arg2=None, arg3=None):
         """ Perform requested plot operation depending on plotType.
@@ -436,15 +302,41 @@ class guiPlot(FigureCanvasTk):
         self._ax0.tick_params(axis='both', labelsize = 7)  # can't find rcParams for this
         self._ax0twin = None
 
+        self._ax0.yaxis.grid(visible=True, color=gridcolor, zorder=0)
+        self._ax0.xaxis.grid(visible=True, color=gridcolor)
+
         # Perform the requested Plot
+        avg_label = f'{self._ma_numdays}-ptma'
         if self._obs in ['tmin', 'tmax']:
             plt_data = PLOT_DATA.TEMP
+
+            if plotType == PLOT_TYPE.ALLDOY:
+                popt = {'tmin': {'color': pltcolor4, 'label': 'tmin', 'linewidth': 0.5},
+                        'tmax': {'color': pltcolor5, 'label': 'tmax', 'linewidth': 0.5}}
+            elif plotType == PLOT_TYPE.SNGLDOY:
+                popt = {'obs': {'color': pltcolor1, 'label': 'SnglDay', 'linewidths': 0.2, 'zorder': 10},
+                        'avg': {'color': pltcolor2, 'label': avg_label, 'linewidths': 0.5, 'zorder': 5}}
+            elif plotType == PLOT_TYPE.HISTO:
+                popt = {'obs': {'color': pltcolor3, 'label': 'SnglDay', 'bins': 25}}
+            else:
+                raise ValueError
+
         elif self._obs == 'prcp':
             plt_data = PLOT_DATA.RAIN
+            if plotType == PLOT_TYPE.ALLDOY:
+                popt = {'obs': {'color': pltcolor1, 'label': 'SnglDay', 'zorder': 10},
+                        'avg': {'color': pltcolor2, 'label': avg_label, 'width': 0.8, 'zorder': 5}}
+            elif plotType == PLOT_TYPE.SNGLDOY:
+                popt = {'obs': {'color': pltcolor1, 'label': 'SnglDay', 'width': 0.3, 'zorder': 10},
+                        'avg': {'color': pltcolor2, 'label': avg_label, 'width': 0.8, 'zorder': 5}}
+            elif plotType == PLOT_TYPE.HISTO:
+                popt = {'obs': {'color': pltcolor3, 'bins': 25, 'rwidth': 0.5, 'zorder': 10}}
+            else:
+                raise ValueError
         else:
             raise ValueError
-        if self._ax0 is not None:
-            self.plot_funcs[plotType](plt_data, arg2)
+
+        self.plot_funcs[plotType](plt_data, arg2, popt)
 
         # Adjust X-Axis Tick Labels for ALLDOY Plots
         if plotType == PLOT_TYPE.ALLDOY:
@@ -452,21 +344,15 @@ class guiPlot(FigureCanvasTk):
             labels = self._ax0.get_xticklabels()
             for _lblid, _lbl in enumerate(labels):
                 _lbl.set_transform(_lbl.get_transform() + self._tick_offset)
-        # if plotType == PLOT_TYPE.ALLDOY:
 
-        self._ax0.yaxis.grid(visible=True, color=gridcolor)
-        self._ax0.xaxis.grid(visible=True, color=gridcolor)
         self._type = plotType
         self.draw()
 
-    def plot_sngldoy(self, plt_dtype, day):
+    def plot_sngldoy(self, plt_dtype, day, plt_opt):
         """ Single Day of Year Plot Generation - X-Axis is enumerated years: 0..num_years - 1
 
         """
-
         self._dayenum = day
-        # self._ax0.grid(which = 'major', axis = 'both', color = gridcolor)
-        # self._ax0.xaxis.grid(True)
 
         # Configure X-Axis
         xtendby = 4
@@ -485,20 +371,20 @@ class guiPlot(FigureCanvasTk):
 
         # Get the requested data and its average for the specified day
         obs_name = plt_dtype.name.lower()
-        self._plty = self.sngldoy_data(plt_dtype, day)
+        self._plty = self._ClimateDataObj.sngldoy_data(plt_dtype, day)
 
         # Generated Plot depends on whether it is 1D or 2D (2D implies min/max temp)
         ymin = []
         ymax = []
         avg_label = f'{self._ma_numdays}-ptma'
-        x = np.arange(self._plty[obs_name].shape[0])
-        if self._plty[obs_name].ndim == 1:
-            spec = {obs_name: {'color': pltcolor1, 'label': 'SnglDay', 'width': 0.3, 'zorder': 10},
-                    'avg':    {'color': pltcolor2, 'label': avg_label, 'width': 0.8, 'zorder': 5}}
 
-            for _name, _opt in spec.items():
-                y = self._plty[_name]
-                sngldoy_bar = self._ax0.bar(x, y, **_opt)
+        if self._plty['dtype'] == PLOT_DATA.RAIN:
+            # for _name, _popt in self._plty['popt'].items():
+            for _name, _popt in plt_opt.items():
+                x = self._plty[_name][:, 0]
+                y = self._plty[_name][:, 1]
+                # popt = plt_opt[_name]
+                sngldoy_bar = self._ax0.bar(x, y, **_popt)
                 ymin.append(0.0)
                 ymax.append(np.nanmax(y))
 
@@ -509,49 +395,42 @@ class guiPlot(FigureCanvasTk):
             xend = (x[-1] - xlim[0])
             xstart = (x[0] - xlim[0])
 
-            ma_mean = np.nanmean(self._plty['avg'])
-            ma_stdev = np.nanstd(self._plty['avg'])
+            ma_mean = np.nanmean(self._plty['avg'][:,1])
+            ma_stdev = np.nanstd(self._plty['avg'][:,1])
             mean_line = self._ax0.axhline(ma_mean, xmin=xstart * xscale,
                                           xmax=xend * xscale, color='blue', linestyle='--')
             sngldoy_info = avg_label + '\n' + r'$\mu$: {:.2f}'.format(ma_mean)
             sngldoy_text = self._ax0.text(xlim[0], ma_mean, sngldoy_info, fontsize = 7, color = 'blue')
 
-        elif self._plty[obs_name].ndim == 2:
-            figsize_points = self.figsize_inches[0] * 72
-            xaxis_limits = self._ax0.get_xlim()
-            xaxis_range = xaxis_limits[1] - xaxis_limits[0]
-            lw = figsize_points / xaxis_range * 0.4
+        elif self._plty['dtype'] == PLOT_DATA.TEMP:
+            for _name, _popt in plt_opt.items():
+                segs = self._plty[_name]
+                _popt['linewidths'] *= self.xunits2pts(self._ax0)
 
-            spec = {obs_name: {'color': pltcolor1, 'label': 'SnglDay', 'linewidths': 0.4 * lw, 'zorder': 10},
-                    'avg':    {'color': pltcolor2, 'label': avg_label, 'linewidths': 1.0 * lw, 'zorder': 5}}
-
-            for _name, _opt in spec.items():
-                y = self._plty[_name]
-                p1 = np.stack((x, y[:, 0]), axis=1)             # M x 2  (x,y1)
-                p2 = np.stack((x, y[:, 1]), axis=1)             # M x 2  (x,y2)
-                segs = np.swapaxes(np.stack((p1, p2)), 0, 1)    # 2 x M x 2 -> M x 2 x 2
-                lineSegs = LineCollection(segs, **_opt)
-
+                lineSegs = LineCollection(segs, **_popt)
                 self._ax0.add_collection(lineSegs)
-                ymin.append(np.nanmin(p1[:, 1]))
-                ymax.append(np.nanmax(p2[:, 1]))
 
-            ymin_avg = np.nanmean(self._plty['avg'][:, 0])
-            ymax_avg = np.nanmean(self._plty['avg'][:, 1])
-            ymin_std = np.nanstd(self._plty['avg'][:, 0])
-            ymax_std = np.nanstd(self._plty['avg'][:, 1])
+                ymin.append(np.nanmin(segs[:, 0, 1]))
+                ymax.append(np.nanmax(segs[:, 1, 1]))
 
+            ymin_avg = np.nanmean(self._plty['avg'][:, 0, 1])
+            ymin_std = np.nanstd(self._plty['avg'][:, 0, 1])
+
+            ymax_avg = np.nanmean(self._plty['avg'][:, 1, 1])
+            ymax_std = np.nanstd(self._plty['avg'][:, 1, 1])
+
+            x = self._plty['avg'][:, 0, 0]
             val_list = [ymin_avg - ymin_std, ymax_avg + ymax_std]
-            print(val_list)
             color_list = ['blue', 'firebrick']
             text_list = ['ymin\n' + r'$\mu - \sigma$', 'ymax\n' + r'$\mu + \sigma$']
+            xaxis_limits = self._ax0.get_xlim()
             for _avg, _color, _text in zip(val_list, color_list, text_list):
                 ymean_hline = self._ax0.axhline(_avg, xmin = x[0], xmax = x[-1],
                                                 color = _color, linestyle = '--')
 
                 info_text = self._ax0.text(xaxis_limits[0], _avg, _text, color=_color, fontsize=8, va='top')
 
-        sngldoy_legend = self._ax0.legend(bbox_to_anchor=(0.0, 1.0), loc='upper left')
+        sngldoy_legend = self._ax0.legend(loc = (0.0, 1.0))
 
         ymin = np.min(ymin)
         ymax = np.max(ymax)
@@ -568,7 +447,7 @@ class guiPlot(FigureCanvasTk):
             raise ValueError
         self._ax0.set_title(f'{self._station} {dayInt2Label(day)}  -' + ttl)
 
-    def plot_alldoy(self, plt_dtype, yrenum):
+    def plot_alldoy(self, plt_dtype, yrenum, plt_opt):
         """ All Days of Year Plot Generation - X-Axis is enumerated days 0..365
             BUT DATA[0] DOES NOT NECESSARILY CORRESPOND WITH JAN-1 IF yrenum == current_yr !
             Instead, data is shifted so that DATA[0] corresponds with 1st day of next month.
@@ -601,20 +480,14 @@ class guiPlot(FigureCanvasTk):
         self._ax0.set_xticklabels(xlabels)
 
         # Add Y-Axis Values depending on plt_dtype
-        xList = []
-        yList = []
-        self._plty = self.alldoy_data(plt_dtype, self._doy_xorigin)
-        num_plty = len(self._plty['dnames'])
+        self._plty = self._ClimateDataObj.alldoy_data(plt_dtype, self._doy_xorigin)
 
-        for _name in self._plty['dnames']:
-            goodIndx = np.argwhere(~np.isnan(self._plty[_name]))
-            yList.append(self._plty[_name][goodIndx].flatten())
-            xList.append(goodIndx.flatten())
+        if self._plty['dtype'] == PLOT_DATA.RAIN:
+            test = plt_opt['obs']
+            bar = self._ax0.bar(self._plty['obs'][:, 0], self._plty['obs'][:, 1],
+                                color=pltcolor1, label = 'SnglDay', zorder=10)
 
-        if num_plty == 1:
-            bar = self._ax0.bar(xList[0], yList[0], color = pltcolor1, label = 'SnglDay', zorder = 10)
-
-            ymax = np.round_(np.max(yList[0]), 1)
+            ymax = np.round_(np.max(self._plty['obs'][:, 1]), 1)
             yticks, ydelta = guiPlot.nice_grid(0, ymax)
             yticks += [yticks[-1] + ydelta]
 
@@ -641,18 +514,12 @@ class guiPlot(FigureCanvasTk):
             ylim = np.ceil(10. * yscale * maxy) / (10. * yscale)
             self._ax0twin.set_ylim([0, ylim])
 
-            # self._ax0twin.set_axis_on()
             self._ax0twin.tick_params(axis='both', labelsize=7)        # can't find rcParams for this
             self._ax0twin.legend(loc = (0.88, 1.0))
 
-        elif num_plty == 2:              # TEMPERATURE PLOT
-            ptList = [np.stack((x.flatten(), y.flatten()), axis=1) for x,y in zip(xList, yList)]
-
-            ptStack = np.stack((ptList[0], ptList[1]))             # (M x 2, M x 2) -> 2 x M x 2
-            segs = np.swapaxes(ptStack, 0, 1)                      # 2 x M x 2      -> M x 2 x 2
-            Mpts = segs.shape[0]
-
-            lineSegs = LineCollection(segs, colors=[pltcolor1] * Mpts)
+        elif self._plty['dtype'] == PLOT_DATA.TEMP:
+            Mpts = self._plty['obs'].shape[0]
+            lineSegs = LineCollection(self._plty['obs'], colors=[pltcolor1] * Mpts)
             self._ax0.add_collection(lineSegs)
 
             spec = {'tmin': {'color': pltcolor4, 'label': 'tmin', 'linewidth': 0.5},
@@ -664,28 +531,28 @@ class guiPlot(FigureCanvasTk):
         else:
             raise ValueError
 
-        self._ax0.set_xlim(0,366)
-        self._ax0.yaxis.grid(visible=True, color=gridcolor)
-        self._ax0.xaxis.grid(visible=True, color=gridcolor)
-        self._ax0.legend(loc = (0.0, 1.0))
+        self._ax0.set_xlim(0, 366)
+        self._ax0.legend(loc=(0.0, 1.0))
         self._ax0.set_title(self._plty['title'])
 
-    def plot_histo(self, plt_dtype: PLOT_DATA, dayenum: int):
+    def plot_histo(self, plt_dtype: PLOT_DATA, dayenum: int, plt_opt):
         """ X-Axis =
         """
-        obs_name = plt_dtype.name.lower()
-        histData = self.sngldoy_data(plt_dtype, dayenum)
+        self._dayenum = dayenum
+        self._plty = self._ClimateDataObj.hist_data(plt_dtype, dayenum)
 
-        # self._dayenum = dayenum
-        # self._ax0.set_title(f'{self._station} {dayint2label(dayenum)} histograph   -  {self._obs}')
-        x = histData[obs_name]
-        # x = self._np_ma_byday[:, dayenum]
+        if len(self._plty['dnames']) == 1:
+            plt_data = self._plty['obs'][:, 1]
+        elif len(self._plty['dnames'] == 2):
+            plt_data = self._plty['obs'][1, :, 1]
 
-        bin_low = np.around(np.min(x), -1)
-        bin_high = np.max(x)
+        bin_low = np.around(np.min(plt_data), -1)
+        bin_high = np.max(plt_data)
+        popt = plt_opt['obs']
 
-        values, bins, container = self._ax0.hist(x, range = (bin_low, bin_high), bins = 25, color = 'blue')
-        # self._histo_artlist.append(container)
+        values, bins, container = self._ax0.hist(plt_data, **popt)
+        self._plty['bins'] = bins
+        # values, bins, container = self._ax0.hist(plt_data, range=(bin_low, bin_high), bins=25, color='blue', zorder= 10)
 
         # Y-Axis Grid & Ticks
         ymax = np.round_(np.max(values), 1)
@@ -695,12 +562,13 @@ class guiPlot(FigureCanvasTk):
         self._ax0.set_ylim((yticks[0], yticks[-1]))
         self._ax0.set_yticks(yticks)
 
-        print(f'Plot Histograph {bins} {bin_low}, {bin_high}, {self._ax0.get_xlim()}')
+        # print(f'Plot Histograph {bins} {bin_low}, {bin_high}, {self._ax0.get_xlim()}')
         self._ax0.set_xticks(bins)
         xtickLabels = ['{:.3f}'.format(x) for x in bins]
         self._ax0.set_xticklabels(xtickLabels)
 
-        self._ax0.set_xlim((bins[0],bins[-1]))
+        self._ax0.set_xlim((bins[0], bins[-1]))
+        self._ax0.set_title(self._plty['station'] + ' ' + dayInt2Label(dayenum) + ' Histogram')
 
     def write_pdf(self, fname):
         pdfObj = PdfPages(fname)

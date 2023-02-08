@@ -78,6 +78,7 @@ def blit(photoimage, aggimage, offsets, bbox=None):
         photoimage.tk.call(_blit_tcl_name, argsid)
 
 class FigureCanvasTk(FigureCanvasAgg, FigureCanvasBase):
+
     def __init__(self, figure=None, master=None, resize_callback=None):
         super().__init__(figure)
 
@@ -122,6 +123,17 @@ class FigureCanvasTk(FigureCanvasAgg, FigureCanvasBase):
             int(width / 2), int(height / 2), image=self._tkphoto)
         self.resize_event()
 
+    def xunits2pts(self, axis):
+        figsize_points = self._figure.get_figwidth() * 72
+        xaxis_limits = axis.get_xlim()
+        xaxis_range = xaxis_limits[1] - xaxis_limits[0]
+        return figsize_points / xaxis_range
+
+    def showArtists(self, artist, depth):
+        # for _ in aList:
+        print(depth, '  ' * depth + str(artist))
+        for _child in artist.get_children():
+            self.showArtists(_child, depth + 1)
 
     def get_tk_widget(self):
         """

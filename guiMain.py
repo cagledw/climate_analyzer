@@ -97,16 +97,6 @@ class guiMain(tk.Tk):
         cursor_extra = '  |  '.join([f'{x}: {y}' for x,y in cursor_info.items()])
         self._info_text.set('{}  |  '.format(cursor_date) + cursor_extra)
 
-        # datestr = '{}-{}-{}'.format(*cursor_xyz[0])
-        # self._info_text.set('{} :   dayVal: {:.2f}   maVal: {:.2f}'.format(datestr, *cursor_xyz[1:]))
-
-    # def on_cfgOption(self, value):
-    #     if value >= 0 and value <= 365:
-    #         self._info_text.set(dayInt2Label(value))
-    #         self._plot_widget.plot(self._TypeButton.enum, self._ObserMenu.selectedItem, self._DayEntry.value)
-    #     else:
-    #         print('Bad')
-
     def on_button1_press(self, event):
         if event.widget == self._plot_widget.tkwidget:
             cursor_xy = self._plot_widget.xform_tk_coords(event.x, event.y)
@@ -248,7 +238,6 @@ class guiMain(tk.Tk):
             #         self._configuredWidgets[_id] = _widget
             # #         print('*Configure [{:8}] {}'.format(_id, str(_widget)))
             # self.fix_geo()
-
 
     def mainloop(self):
         tk.mainloop()
