@@ -9,7 +9,7 @@ import numpy as np
 
 PLOT_DATA = IntEnum('PLOT_DATA', ['RAIN', 'TEMP'])
 HIST_DATA = TypedDict('HIST_DATA',
-                      {'dtype': PLOT_DATA, 'dnames': List[str], 'obs': np.ndarray})
+                      {'dtype': PLOT_DATA, 'dnames': List[str], 'obs': np.ndarray, 'ma': np.ndarray})
 
 class ClimateDataObj():
     """A tk Application (i.e. Main/Root Window)
@@ -31,7 +31,7 @@ class ClimateDataObj():
     @staticmethod
     def moving_average(src_array, dayenum, numPts):
         """ Returns an 1D ndarray of N-Pt Moving Average Values calculated from src_array
-            src_array[R-Rows x C-Columns] of a dtype = float, where each year represents 366 days
+            src_array[R-Rows x C-Columns] of a dtype = float, where each row represents 366 days
 
             N-Pt Centered Moving Average is calculated along a row centered @ dayenum.
 
@@ -72,16 +72,17 @@ class ClimateDataObj():
         return self._np_climate_data.shape[0]
 
     def hist_data(self, dtype: PLOT_DATA, day: int) -> HIST_DATA:
-        """ Construct a dict of data required for HIST Plot with the following keys:
-              'dtype'    = PLOT_DATA
-              'dnames'   = List[str]
+        """ Construct a dict of data required for HIST Plot.
         """
-
         dnames = ClimateDataObj.get_dnames(dtype)
-        title = f'{self._station} Histogram'
-        rtnDict = {'dtype': dtype, 'dnames': dnames, 'obs': [], 'station': self._station, 'title': title}
+        rtnDict = {
+            'dtype': dtype,
+            'dnames': dnames,
+            'station': self._station,
+            'ma_winsz': self._ma_numdays}
 
         # Construct ndarray's with nan pts removed and x, y combined into single array
+        maList = []
         obsList = []
         for _name in dnames:
             obs = self._np_climate_data[:, day][_name]
@@ -91,12 +92,19 @@ class ClimateDataObj():
             x = goodIndx.flatten()
             obsList.append(np.stack((x, y), axis=1).astype(np.float32))    # (M x 1, M x 1) -> M x 2
 
-            obsMovAvg = ClimateDataObj.moving_average(self._np_climate_data[_name], day, self._ma_numdays)
+            ma = ClimateDataObj.moving_average(self._np_climate_data[_name], day, self._ma_numdays)
+            goodIndx = np.argwhere(~np.isnan(ma))
+
+            y = ma[goodIndx].flatten()
+            x = goodIndx.flatten()
+            maList.append(np.stack((x, y), axis=1).astype(np.float32))
 
         if len(obsList) == 1:
             rtnDict['obs'] = obsList[0]
+            rtnDict['ma'] = maList[0]
         elif len(obsList) == 2:
-            rtnDict['obs'] = np.stack(obsList)                                    # (M x 2, M x 2) -> 2 x M x 2
+            rtnDict['obs'] = np.stack(obsList)                             # (M x 2, M x 2) -> 2 x M x 2
+            rtnDict['ma'] = np.stack(maList)
         else:
             raise ValueError
         return rtnDict

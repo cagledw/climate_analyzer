@@ -45,7 +45,7 @@ class guiMain(tk.Tk):
         self.dbMgr.open(dbList[0])
         self.yrList, self.np_climate_data, missing_data = self.dbMgr.rd_climate_data()
 
-        #Initial Gui Setup
+        # Initial Gui Setup
         self.title("Climate Data Analyzer")
         self.geometry('+{}+{}'.format(*self._posXY))
         self._style = guiStyle(self)  #Style for all Widgets!
