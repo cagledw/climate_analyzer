@@ -77,7 +77,6 @@ class guiPlot(FigureCanvasTk):
 
         self._obs = None             # Observation, np_climate_data field name
         self._type = None             # Type of Plot of PLOT_TYPE
-        # self._obs_max = None
         self._ma_numdays = 15         # Moving Avg Window Size
 
         self._dayenum = 0             # Valid if type == SNGL_DOY

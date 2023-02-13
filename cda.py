@@ -13,13 +13,15 @@ import re
 import os
 import copy
 import numpy as np
+from configparser import RawConfigParser
 
 from glob import glob
 from collections import namedtuple
 from datetime import date, datetime, timedelta
 from itertools import groupby, accumulate
 
-from noaa import noaa_aliases, get_noaa_id, get_stations, get_dataset_v1
+from noaa import NOAA
+# from noaa import noaa_aliases, get_noaa_id, get_stations, get_dataset_v1
 from guiMain import guiMain
 from guiPlot import dayInt2MMDD, dayInt2Label
 from dbCoupler import dbCoupler, DBTYPE_CDO
@@ -30,29 +32,39 @@ user_dbPath = 'AppData\\ClimateData'
 def print_stations(station_list):
     """ print station_list to std_out
     """
-    HomeLoc = [47.60923, -122.16787]   # Lat & Long of HomeLoc
-
     for _s in station_list:
-        id = _s.id.split(':')
-        if id[0].upper() != 'GHCND':
+        sid = _s.id.split(':')
+        if sid[0].upper() != 'GHCND':
             continue
 
         elev = f'{_s.elev * 3.28084:>4.0f}'
         print(f'{_s.id:17} {_s.dist2home:>4.1f}mi {elev} {_s.mindate.date()} {_s.maxdate.date()} {_s.name[:40]}')
 
 
-def store_to_db(station_id, station_name):
+def store_to_db(noaaObj: NOAA, dbPath: str, noaa_id, station_name):
     """ Download NOAA Climate Data from Web Portal & Store in SQLite DB
     """
-
-    dbname = os.path.join(".", station_name + '.db')
-    if os.path.isfile(dbname):
+    dbfName = os.path.join(dbPath, station_name + '.db')
+    if os.path.isfile(dbfName):
         print('File Exists {}'.format(dbname))
         return
 
-def update_db(dbList):
+    noaa_info = noaaObj.get_station(noaa_id)
+
+    dbMgr = dbCoupler()
+    dbMgr.open(dbfName)
+    for _yr in range(noaa_info.mindate.year, date.today().year + 1):
+        start_date = date(_yr, 1, 1)
+        cdList = noaaObj.get_dataset_v1(noaa_id, start_date)
+        print(_yr, len(cdList))
+        dbMgr.wr_cdtable(str(_yr), cdList)
+
+    dbMgr.close()
+    return None
+
+def update_db(alias2id, updateDir, webAccessObj):
     """
-     Check each db in dbList for missing data.
+     Scan for Climate DataBase Files in updateDir, and then check each for missing data.
      If missing data is found, attempt Download from NOAA & Update DB.
        Each sub-array of climate data has exactly 366 elements
        non-leap-year sub-array's are expected to be void for Feb-29 and are ignored.
@@ -62,10 +74,14 @@ def update_db(dbList):
     Then identify days that are all nan (void)
     """
     dbMgr = dbCoupler()
-    for dbfName in dbList:
-        station_name = os.path.splitext(os.path.basename(dbfName))[0]
-        station_id = get_noaa_id(station_name)
-        print(f'    Checking {station_name}, {station_id}')
+
+    dbMatch = os.path.join(dbDir, '*.db')
+    updateFiles = [os.path.abspath(_f) for _f in glob(dbMatch)]
+
+    for dbfName in updateFiles:
+        s_alias = os.path.splitext(os.path.basename(dbfName))[0]
+        s_id = alias2id[s_alias]
+        print(s_alias, s_id, dbfName)
 
         dbMgr.open(dbfName)
         yrList, np_climate_data, missing_data = dbMgr.rd_climate_data()
@@ -93,7 +109,7 @@ def update_db(dbList):
                     update_day = date(chkyear, *dayMMDD)
                     print(f'    Missing {nummissing} days, starting @ {update_day}')
 
-                    update_vals = get_dataset_v1(station_id, update_day)
+                    update_vals = webAccessObj.get_dataset_v1(s_id, update_day)
 
                     if not update_vals:
                         print('    No Updates for {}'.format(update_day))
@@ -120,36 +136,100 @@ def update_db(dbList):
                     print(_val._asdict())
 
                 dbMgr.wr_cdtable(str(chkyear), update_vals)
+        dbMgr.close()
+    return updateFiles
+
+    # for dbfName in dbList:
+    #     station_name = os.path.splitext(os.path.basename(dbfName))[0]
+    #     station_id = get_noaa_id(station_name)
+    #     print(f'    Checking {station_name}, {station_id}')
+    #
+    #     dbMgr.open(dbfName)
+    #     yrList, np_climate_data, missing_data = dbMgr.rd_climate_data()
+
+
+def get_appCfg(iniFilePath):
+    config = RawConfigParser(allow_no_value=True)
+    try:
+        with open(iniFilePath) as rfp:
+            config.read(iniFilePath)
+    except IOError:
+        config['Paths'] = {}
+        config['Paths']['dbDir'] = os.path.join("%USERPROFILE%", user_dbPath)
+
+        config['NOAA'] = {}
+        config['NOAA']['cdo_token'] = ''
+        config['NOAA']['fips_loc'] = 'FIPS:53033'
+        config['NOAA']['lat_long'] = str((47.60923, -122.16787))
+
+        config['Stations'] = {}
+        with open(iniFilePath, 'w') as fp:
+            config.write(fp)
+        fp.close()
+
+    return config
 
 
 if __name__ == '__main__':
 
-    import argparse
-    homedir = os.getenv('USERPROFILE')
-    dbPath = os.path.join(homedir, user_dbPath, '*.db')
-    print(dbPath)
+    # INI File Specifies critical parameters - cdo_token MUST BE SUPPLIED!
+    iniPath = os.path.splitext(__file__)[0] + '.ini'
+    appCfg = get_appCfg(os.path.join(iniPath))
+    dbDir = os.path.expandvars(appCfg['Paths']['dbDir'])
+    cdo_token = appCfg['NOAA']['cdo_token']
 
-    parser = argparse.ArgumentParser(description='Download NOAA Climate Data')
-    group = parser.add_mutually_exclusive_group()
+    if not cdo_token:
+        print(f'Error: {iniPath} must supply a cdo_token')
+        print('See: https://www.ncdc.noaa.gov/cdo-web/token')
 
-    group.add_argument('-stations', action='store_true', default = False, help='[arg1] - Display Stations within [arg1] distance')
-    group.add_argument('-getcd', action='store_true', default = False,
-                       help='[arg1] - Get Climate Data for station [arg1]')
-    parser.add_argument('arg1', action='store', nargs='?', default=None)
-
-    args = parser.parse_args()
-    if args.stations:
-        dist2home = float(args.arg1) if args.arg1 is not None else 30.0
-        print_stations(get_stations(dist2home))
-    elif args.getcd:
-        if args.arg1 is None:
-            station_info = '\n'.join(['    ' + x for x in noaa_aliases()])
-        else:
-            raise ValueError
     else:
-        dbFiles = [os.path.abspath(_f) for _f in glob(dbPath)]
-        update_db(dbFiles)
+        import argparse
+        parser = argparse.ArgumentParser(description='  \033[32mDownload and Analyze NOAA Climate Data\n'
+                                                     '  Station Alias and ID must configured in cda.ini\n'
+                                                     '  Use -show_ids to display configured stations\n'
+                                                     '  Use -find_ids to display local stations\033[37m',
+                                         formatter_class=argparse.RawTextHelpFormatter)
 
-        gui = guiMain(dbFiles, (800, 100))  # Gui Setup
-        gui.mainloop()
+        group = parser.add_mutually_exclusive_group()
 
+        group.add_argument('-find_ids', action='store_true', default=False,
+                           help='[arg1] - Display Stations within [arg1] distance')
+        group.add_argument('-show_ids', action='store_true', default=False,
+                           help='[arg1] - Display Stations within [arg1] distance')
+        group.add_argument('-getcd', action='store_true', default = False,
+                           help='[arg1] - Get Climate Data for station [arg1]')
+        parser.add_argument('arg1', action='store', nargs='?', default=None)
+        args = parser.parse_args()
+
+        noaaObj = NOAA(dict(appCfg['NOAA']))     # NOAA Obj provided with dict from ini file
+        station_dict = dict(appCfg['Stations'])  # ini file provides dict of alias:station_id
+        if args.find_ids:
+            dist2home = float(args.arg1) if args.arg1 is not None else 30.0
+            print_stations(noaaObj.get_stations(dist2home))
+
+        elif args.show_ids:
+            print('{:^20}{:^16}'.format('alias', 'station_id'))
+            for _k, _v in appCfg['Stations'].items():
+                print(f'{_k:20}: {_v}')
+
+        elif args.getcd:
+
+            if args.arg1 is None:
+                station_info = '\n'.join(['    ' + x for x in noaa_aliases()])
+            else:
+                try:
+                    station_id = appCfg['Stations'][args.arg1]
+
+                except KeyError:
+                    parser.error('[arg1] must supply station alias:\n' + station_info)
+                    station_id = None
+
+                if station_id:
+                    store_to_db(noaaObj, dbDir, station_id, args.arg1)
+                else:
+                    raise ValueError
+        else:
+            dbFiles = update_db(station_dict, dbDir, noaaObj)
+
+            gui = guiMain(dbFiles, (800, 100))  # Gui Setup
+            gui.mainloop()

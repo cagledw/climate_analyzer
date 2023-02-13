@@ -10,7 +10,7 @@ import numpy as np
 import tkinter as tk
 import tkinter.ttk as ttk
 
-from noaa import get_noaa_id, get_dataset_v1
+# from noaa import get_noaa_id, get_dataset_v1
 from dbCoupler import dbCoupler
 from guiPlot import guiPlot, dayInt2MMDD, dayInt2Label, PLOT_TYPE
 from guiStyle import guiStyle
@@ -20,7 +20,7 @@ class guiMain(tk.Tk):
 
     """
     def __init__(self, dbList: list[str], pos_tuple):
-        """ A tk Application (i.e. Main/Root Window) to display Climate Data and its Analysis
+        """ A tk Application (i.e. Main/Root Window) to display Climate Data and its Analysis.
             Weather data is read from a sqlite DB.  A list of DB File Paths is passed to __init__.
 
             The data retrieved from sqlite DB is:
@@ -39,7 +39,7 @@ class guiMain(tk.Tk):
         self._posXY = pos_tuple
         self._stations = [path.splitext(path.basename(x))[0] for x in self.dbList]
         self._selected_station = self._stations[0]
-        station_id = get_noaa_id(self._selected_station)
+        # station_id = get_noaa_id(self._selected_station)
 
         self.dbMgr = dbCoupler()
         self.dbMgr.open(dbList[0])
@@ -48,7 +48,7 @@ class guiMain(tk.Tk):
         # Initial Gui Setup
         self.title("Climate Data Analyzer")
         self.geometry('+{}+{}'.format(*self._posXY))
-        self._style = guiStyle(self)  #Style for all Widgets!
+        self._style = guiStyle(self)                  # Style for all Widgets!
 
         # self.bind("<Map>", self.on_map)
         self.bind("<Configure>", self.on_configure)
@@ -56,23 +56,24 @@ class guiMain(tk.Tk):
         self.bind("<Motion>", self.on_motion)
         self.bind("<Button-1>", self.on_button1_press)
 
-        self.rowconfigure(0, weight=1)      # Expand Widgets in Height
-        self.columnconfigure(0, weight=1)   # Expand Widgets in Width
+        self.rowconfigure(0, weight=1)               # Expand Widgets in Height
+        self.columnconfigure(0, weight=1)            # Expand Widgets in Width
+
         # Row-0, Column-0 : Plot Widget
-        self._plot_widget = guiPlot(self, self._selected_station, self.yrList, self.np_climate_data, figsize = (1000, 400))
-        self._plot_widget.grid(row = 0, column = 0, rowspan = 1, columnspan = 7)
+        self._plot_widget = guiPlot(self, self._selected_station, self.yrList, self.np_climate_data, figsize=(1000, 400))
+        self._plot_widget.grid(row=0, column=0, rowspan=1, columnspan=7)
 
         # Column-0, Information Widget
         self._info_text = tk.StringVar()                                          # Col-0, Information Widget
-        self._tk_info = ttk.Label(self, textvariable = self._info_text, width = 40)
-        self._tk_info.grid(row = 1, column = 0, sticky='nsw')
+        self._tk_info = ttk.Label(self, textvariable=self._info_text, width=40)
+        self._tk_info.grid(row=1, column=0, sticky='nsw')
 
         # Column-1, PDF Button
-        self._pdfButton = ttk.Button(self, text = 'PDF', style = 'red.TButton', width = 5, command = self.on_pdfButton)
-        self._pdfButton.grid(row = 1, column = 1, sticky = 'nse')
+        self._pdfButton = ttk.Button(self, text='PDF', style='red.TButton', width=5, command=self.on_pdfButton)
+        self._pdfButton.grid(row=1, column=1, sticky='nse')
 
         self._TypeButton = tkToggleButton(self, PLOT_TYPE, self.on_TypeButton)
-        self._TypeButton.grid(row = 1, column = 6, sticky='nse')
+        self._TypeButton.grid(row=1, column=6, sticky='nse')
         self._TypeButton.enum = PLOT_TYPE.ALLDOY
 
         # Column-2,  ArgSelFrame
@@ -86,15 +87,13 @@ class guiMain(tk.Tk):
         self._ObserMenu = tkOptionMenu(self, self.cd_names, self.cd_names.index('PRCP'), self.on_ObserMenu)
         self._ObserMenu.grid(row=1, column=5, sticky='e')
 
-        # print(self._ArgSelFrame.argvalue)
-
         self._plot_widget.plot(self._TypeButton.enum, self._ObserMenu.selectedItem, init_yrenum)
         self._update_info_text()
 
     def _update_info_text(self):
         cursor_info = self._plot_widget.cursor
         cursor_date = cursor_info.pop('date')
-        cursor_extra = '  |  '.join([f'{x}: {y}' for x,y in cursor_info.items()])
+        cursor_extra = '  |  '.join([f'{x}: {y}' for x, y in cursor_info.items()])
         self._info_text.set('{}  |  '.format(cursor_date) + cursor_extra)
 
     def on_button1_press(self, event):
@@ -143,7 +142,6 @@ class guiMain(tk.Tk):
             argType = self._ArgSelFrame.argtype # This May Not Exist
 
             if argType != new_type:
-
                 if new_type == PLOT_TYPE.ALLDOY:
                     self._ArgSelFrame.argvalue = self._plot_widget.year
                     plot_arg = self._plot_widget.yearenum
@@ -155,13 +153,15 @@ class guiMain(tk.Tk):
                 elif new_type == PLOT_TYPE.HISTO:
                     plot_arg = self._plot_widget.dayenum
 
-                # self._ArgSelFrame.argvalue = self._plot_widget.year
+                else:
+                    raise ValueError
+
                 self._ArgSelFrame.argtype = new_type
 
             else:
                 raise ValueError('on_TypeButton argType Error')
 
-            print('  on_TypeButton {} -> {}'.format(argType.name, new_type.name))
+            # print('  on_TypeButton {} -> {}'.format(argType.name, new_type.name))
 
             argVal = self._ArgSelFrame.argvalue # This May Not Exist
             self._plot_widget.plot(self._TypeButton.enum, self._ObserMenu.selectedItem, plot_arg)
@@ -186,7 +186,7 @@ class guiMain(tk.Tk):
                 plot_arg = self.yrList.index(argVal)
                 if plot_arg < 0 or plot_arg >= self.np_climate_data.shape[0]:
                     return False
-            except:
+            except ValueError:
                 return False
 
         self._plot_widget.plot(self._TypeButton.enum, self._ObserMenu.selectedItem, plot_arg)
@@ -195,13 +195,13 @@ class guiMain(tk.Tk):
 
     def on_ArgLimits(self, argType):
         if argType == PLOT_TYPE.SNGLDOY:
-            return (0, self.np_climate_data.shape[1] - 1)
+            return 0, self.np_climate_data.shape[1] - 1
 
         elif argType == PLOT_TYPE.ALLDOY:
-            return (self.yrList[0], self.yrList[self.np_climate_data.shape[0] - 1])
+            return self.yrList[0], self.yrList[self.np_climate_data.shape[0] - 1]
 
         elif argType == PLOT_TYPE.HISTO:
-            return (0, self.np_climate_data.shape[1] - 1)
+            return 0, self.np_climate_data.shape[1] - 1
 
     def on_ObserMenu(self, xItem):
         """ Activated on changes to SelectionFrame and displays the appropriate Frame.
@@ -228,19 +228,9 @@ class guiMain(tk.Tk):
         # print(event)
         if event.widget == self:
             self._posXY = (event.x, event.y)
-            # print('guiMain Configure {:16} [{}] {}'.format(event.widget.winfo_name(), event.widget.winfo_id(), self._posXY))
 
-            # config_widget_list = list(self._configuredWidgets.keys())
-            # for _id, _widget in self.fix_widgets.items():
-            #     if _id not in config_widget_list:
-            #         _widget.bind("<Map>", self.on_map)
-            #         _widget.bind("<Unmap>", self.on_unmap)
-            #         self._configuredWidgets[_id] = _widget
-            # #         print('*Configure [{:8}] {}'.format(_id, str(_widget)))
-            # self.fix_geo()
-
-    def mainloop(self):
-        tk.mainloop()
+    def mainloop(self, n: int = 0):
+        tk.mainloop(n)
 
 
 class tkArgSelFrame(ttk.Frame):
@@ -254,18 +244,24 @@ class tkArgSelFrame(ttk.Frame):
         self._callback = callback
         self._callback_lim = callback_lim
         self._label_text = tk.StringVar()                # Information Widget
-        super().__init__(parent, width = 100)
+        super().__init__(parent, width=100)
 
-        self.iconLf = tk.PhotoImage(master=self, file = 'arrow-lf16x16.gif', name = 'arrow-lf')
-        self._tkPrevBtn = ttk.Button(self, image = self.iconLf, width = 1, command=self.on_PrevBtn)
-        self._tkPrevBtn.grid(row = 0, column = 2, sticky = 'nse')
+        iconDir = path.join(path.dirname(__file__), 'Icons')
+        iconPaths = {_name: _path for _name, _path in
+                     zip(['arrow-lf', 'arrow-rt'], [path.join(iconDir, _icon)
+                                                    for _icon in ['arrow-lf16x16.gif', 'arrow-rt16x16.gif']])}
 
-        self.iconRt = tk.PhotoImage(master=self, file = 'arrow-rt16x16.gif', name = 'arrow-rt')
-        self._tkNextBtn = ttk.Button(self, image = self.iconRt, width = 1, command=self.on_NextBtn)
-        self._tkNextBtn.grid(row = 0, column = 3, sticky = 'nse')
+        self._tkImages = {_name: tk.PhotoImage(master=self, file=_file, name=_name)
+                          for _name, _file in iconPaths.items()}
+
+        self._tkPrevBtn = ttk.Button(self, image=self._tkImages['arrow-lf'], width=1, command=self.on_PrevBtn)
+        self._tkPrevBtn.grid(row=0, column=2, sticky='nse')
+
+        self._tkNextBtn = ttk.Button(self, image=self._tkImages['arrow-rt'], width=1, command=self.on_NextBtn)
+        self._tkNextBtn.grid(row=0, column=3, sticky='nse')
 
         self._ArgEntry = tkIntEntry(self, 'Day', self.on_ArgEntry)
-        self._ArgEntry.grid(row = 0, column = 1, sticky='e')
+        self._ArgEntry.grid(row = 0, column=1, sticky='e')
         self._ArgEntry.bind("<Return>", self.on_return)
 
         self._ArgLabel = ttk.Label(self, textvariable = self._label_text)
@@ -328,7 +324,6 @@ class tkArgSelFrame(ttk.Frame):
         self._callback(self._argType, newval)
 
         # print('Return {}'.format(event))
-
 
 
 class tkIntEntry(ttk.Entry):
