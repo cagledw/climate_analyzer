@@ -1,6 +1,5 @@
 *~
 *.pyc
-*.db
 *.py#
 .idea
 .swp
