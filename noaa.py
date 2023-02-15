@@ -14,7 +14,7 @@ from glob import glob
 from datetime import date, datetime, timedelta
 from collections import namedtuple
 from haversine import haversine, Unit
-from dbCoupler import dbCoupler, DBTYPE_CDO
+from dbCoupler import DBTYPE_CDO
 
 
 # HomeLoc = [47.60923, -122.16787]   # Lat & Long of HomeLoc
@@ -30,85 +30,119 @@ class NOAA():
         and Daily Climate Summary Data for a particular station.
 
         NOAA's Web-Site requires a 'cdo_token' to access its data.
-        The ctor for this class must be supplied with the cdo_token.kkkkjkkkjjjkjkkkkkkkkkk
+        The ctor for this class must be supplied with the cdo_token.
     """
     def __init__(self, cfgDict):
-        for _attr in ['cdo_token', 'fips_loc', 'lat_long']:
-            setattr(self, _attr, cfgDict[_attr])
+        self._cdo_token = cfgDict['cdo_token']
+        self._fip_code = cfgDict['fip_code']
 
-    # def get_noaa_id(self, alias):
-    #     try:
-    #         id = noaa_ids[alias]
-    #     except:
-    #         print('fail', alias)
-    #         id = None
-    #     return id
+        homeCoords = cfgDict['home'].strip('()').split(',')
+        self.home_coords = [float(x) for x in homeCoords]
 
-    # def noaa_aliases(self):
-    #     return station_ids.keys()
+    @property
+    def home(self):
+        return '(' + ','.join(['{}'.format(x) for x in self.home_coords]) + ')'
 
-    def get_station(self, station_id):
-        header = {'token': self.cdo_token}
+    @property
+    def fip_code(self):
+        return self._fip_code
+
+    def station_info(self, station_id):
+        header = {'token': self._cdo_token}
         uri = 'cdo-web/api/v2/{}/{}'.format('stations', station_id)
+        station = None
+        errStatus = None
 
-        res = requests.get('https://{}/{}'.format(DEFAULT_END_POINT, uri), headers=header)
-        if res.status_code == 200:
+        try:
+            res = requests.get('https://{}/{}'.format(DEFAULT_END_POINT, uri), headers=header)
+        except requests.exceptions.ReadTimeout as err:
+            errStatus = err.args[0]
+            res = None
+
+        if errStatus is None and res is not None and res.status_code != 200:
+            errStatus = requests.exceptions.ConnectionError(f'status:{res.status_code}')
+
+        if errStatus is None:
             data = res.json()
-
             mindate = datetime.strptime(data['mindate'], "%Y-%m-%d")
             maxdate = datetime.strptime(data['maxdate'], "%Y-%m-%d")
             lat_long = (data['latitude'], data['longitude'])
-            miles2home = haversine(lat_long, HomeLoc, unit=Unit.MILES)
-
-            # sdiff = sum([(x - y)**2 for x,y in zip(HomeLoc, lat_long)])
+            miles2home = haversine(lat_long, self.home_coords, unit=Unit.MILES)
+            sta_elevation = data['elevation']
+            if data['elevationUnit'] == 'METERS':
+                sta_elevation *= 3.28084
 
             station = (STATION_T(id=station_id,
                                  name=data['name'],
                                  lat_long=lat_long,
-                                 elev=data['elevation'],
+                                 elev=sta_elevation,
                                  mindate=mindate,
                                  maxdate=maxdate,
                                  dist2home=miles2home))
-        else:
-            print('bad')
-            station = None
-        return station
+        return errStatus, station
 
-    def get_stations(self, dist2home):
+    def get_stations(self, dist2home: float):
+        """  Returns list of STATION_T within dist2home miles of home_lat_long.
+             Only stations within the geographic area defined by home_fips_loc returned.
         """
+        home_coords = self.home.strip('()')
+        home_lat_long = [float(x) for x in home_coords.split(',')]
 
-        """
-        # fipwa = 'FIPS:53033'  #Location Identifier
         results = []
-        header = {'token': self.cdo_token}
-        uri = 'cdo-web/api/v2/{}?locationid={}&limit=1000'.format('stations', self.fips_loc)
+        header = {'token': self._cdo_token}
+        uri = 'cdo-web/api/v2/{}?locationid={}&limit=1000'.format('stations',
+                                                                  f'FIPS:{self.fip_code}')
+        offset = 0
+        done = False
+        errStatus = None
+        date_filter_max = date.today().year
+        while not done:
+            try:
+                res = requests.get('https://{}/{}'.format(DEFAULT_END_POINT, uri),
+                                   headers=header, timeout=(2.0, 2.0))
+            except requests.exceptions.ReadTimeout as err:
+                errStatus = err.args[0]
+                break
 
-        res = requests.get(
-            'https://{}/{}'.format(DEFAULT_END_POINT, uri), headers=header)
+            if res.status_code != 200:
+                errStatus = requests.exceptions.ConnectionError(f'status:{res.status_code}')
+                break
 
-        if res.status_code == 200:
-            meta = res.json()['metadata']
-            data = res.json()['results']
+            data_count = int(res.json()['metadata']['resultset']['count'])
+            offset += len(res.json()['results'])
+            if offset >= data_count:
+                done = True
 
-            for _station in data:
-                mindate = datetime.strptime(_station['mindate'], "%Y-%m-%d")
-                maxdate = datetime.strptime(_station['maxdate'], "%Y-%m-%d")
-                if maxdate.year < 2022 or mindate.year > 2000:
-                    continue
+            if res.status_code == 200:
+                meta = res.json()['metadata']
+                data = res.json()['results']
 
-                lat_long = (_station['latitude'], _station['longitude'])
-                sdiff = sum([(x - y)**2 for x,y in zip(HomeLoc, lat_long)])
-                miles2home = haversine(lat_long, HomeLoc, unit=Unit.MILES)
+                for _station in data:
+                    mindate = datetime.strptime(_station['mindate'], "%Y-%m-%d")
+                    maxdate = datetime.strptime(_station['maxdate'], "%Y-%m-%d")
+                    if maxdate.year < date_filter_max or mindate.year > 2000:
+                        continue
 
-                if miles2home < dist2home:
-                    results.append(STATION_T(id = _station['id'],
-                                             name = _station['name'],
-                                             lat_long = lat_long,
-                                             elev = _station['elevation'],
-                                             mindate = mindate,
-                                             maxdate = maxdate,
-                                             dist2home = miles2home))
-        return sorted(results, key=lambda x: x.dist2home)
+                    sta_lat_long = (_station['latitude'], _station['longitude'])
+                    try:
+                        sta_elevation = _station['elevation']
+                        if _station['elevationUnit'] == 'METERS':
+                            sta_elevation *= 3.28084
+                    except KeyError:
+                        sta_elevation = float('nan')
+
+                    miles2home = haversine(sta_lat_long, home_lat_long, unit=Unit.MILES)
+
+                    if miles2home < dist2home:
+                        results.append(STATION_T(id=_station['id'],
+                                                 name=_station['name'],
+                                                 lat_long=sta_lat_long,
+                                                 elev=sta_elevation,
+                                                 mindate=mindate,
+                                                 maxdate=maxdate,
+                                                 dist2home=miles2home))
+
+        return errStatus, sorted(results, key=lambda x: x.dist2home)
 
     def get_dataset_v1(self, station_id, start):
         """ NOAA has TWO API's to Retrieve Historical Climate Data - Daily (HCDD):
@@ -135,8 +169,8 @@ class NOAA():
                        'endDate'  : date(start.year, 12, 31).isoformat(),
                        'units' : 'standard'}
             try:
-                res = requests.get(noaa_url, params = payload, timeout = (5.0, 5.0),
-                               headers = {"Token": self.cdo_token})
+                res = requests.get(noaa_url, params=payload, timeout=(5.0, 5.0),
+                                   headers={"Token": self._cdo_token})
             except Exception as err:
                 print('Err {}'.format(err))
                 break
@@ -180,7 +214,7 @@ class NOAA():
         hcdd_flds = ['TMAX', 'TMIN', 'TAVG', 'PRCP', 'SNOW', 'SNWD']
         data_by_year = {}
 
-        info = get_station(id)
+        info = station_info(id)
         for _yr in range(info.mindate.date().year, info.maxdate.date().year + 1):
         # for _yr in range(2021, 2022):
             hcdd_list = []
@@ -209,6 +243,10 @@ class NOAA():
 
 
                 res = requests.get(noaa_url, params = payload, headers = {"Token": CDO_TOKEN})
+
+
+
+
 
                 if res.status_code != 200:
                     print('fail', res.status_code)

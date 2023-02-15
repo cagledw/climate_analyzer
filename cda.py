@@ -1,44 +1,49 @@
 """
-Climate Data Analysis, Download Data from NOAA Climate Data WebSite OR Launch tkinter GUI
-Two options for Climate Data Download:
-    -stations : write list of nearby stations to stdout
+Climate Data Analysis.
+  Download Data from NOAA Climate Data WebSite and/or Launch tkinter GUI
+  Only Climate Data for locations this Apps's Configuration (*.ini) File can be downloaded
+
+  Three options for Climate Data Download:
+    -find_ids : Display Stations and their ID within certain distance of 'Home'
+    -show_ids : Display Stations whose ID is known
     -getcd    : download Historical Climate Data for specific Station to sqlite DB
 
-Otherwise, launches GUI for analysis of data previously stored in sqlite DB.
+  Otherwise, launches GUI for analysis of data previously stored in sqlite DB.
 
 
 """
 
 import re
 import os
+import sys
 import copy
 import numpy as np
 from configparser import RawConfigParser
 
 from glob import glob
-from collections import namedtuple
+# from collections import namedtuple
 from datetime import date, datetime, timedelta
 from itertools import groupby, accumulate
 
 from noaa import NOAA
-# from noaa import noaa_aliases, get_noaa_id, get_stations, get_dataset_v1
 from guiMain import guiMain
 from guiPlot import dayInt2MMDD, dayInt2Label
 from dbCoupler import dbCoupler, DBTYPE_CDO
 
+fip_dbName = 'fip_codes.db'
 user_dbPath = 'AppData\\ClimateData'
-
 
 def print_stations(station_list):
     """ print station_list to std_out
     """
+    print(f'{"stations_id":^15} {"dist2home":^10} {"elev":^6} {"1st Date":^10} {"last Date"}')
     for _s in station_list:
         sid = _s.id.split(':')
         if sid[0].upper() != 'GHCND':
             continue
 
-        elev = f'{_s.elev * 3.28084:>4.0f}'
-        print(f'{_s.id:17} {_s.dist2home:>4.1f}mi {elev} {_s.mindate.date()} {_s.maxdate.date()} {_s.name[:40]}')
+        elev = f'{_s.elev:>4.0f}'
+        print(f'{_s.id:17} {_s.dist2home:>4.1f}mi {elev:>6}ft {_s.mindate.date()} {_s.maxdate.date()} {_s.name[:40]}')
 
 
 def store_to_db(noaaObj: NOAA, dbPath: str, noaa_id, station_name):
@@ -148,7 +153,9 @@ def update_db(alias2id, updateDir, webAccessObj):
     #     yrList, np_climate_data, missing_data = dbMgr.rd_climate_data()
 
 
-def get_appCfg(iniFilePath):
+def get_appCfg(iniFilePath: str) -> RawConfigParser:
+    """ Attempt to Open a Configuration iniFile and create one if Non-Existent
+    """
     config = RawConfigParser(allow_no_value=True)
     try:
         with open(iniFilePath) as rfp:
@@ -159,15 +166,54 @@ def get_appCfg(iniFilePath):
 
         config['NOAA'] = {}
         config['NOAA']['cdo_token'] = ''
-        config['NOAA']['fips_loc'] = 'FIPS:53033'
-        config['NOAA']['lat_long'] = str((47.60923, -122.16787))
+        config['NOAA']['fip_code'] = '53033'
+        config['NOAA']['home_lat_long'] = str((47.60923, -122.16787))
 
         config['Stations'] = {}
         with open(iniFilePath, 'w') as fp:
+            fp.write(';  Climate Data Analysis Configuration\n')
+            fp.write(';  Obtain cdo_token from https://www.ncdc.noaa.gov/cdo-web/token\n')
+            fp.write(';  Lookup FIPS State+County Codes @ \n')
+            fp.write(';     https://en.wikipedia.org/wiki/List_of_United_States_FIPS_codes_by_county\n')
             config.write(fp)
         fp.close()
-
     return config
+
+def save_appCfg(cfgParser, iniFilePath: str):
+    try:
+        with open(iniFilePath, 'w') as wfp:
+            cfgParser.write(wfp)
+
+    except IOError:
+        print('Error')
+
+def find_fipcode(state, region=None):
+    dbfName = os.path.join(os.path.dirname(__file__), fip_dbName)
+
+    dbMgr = dbCoupler()
+    dbMgr.open(dbfName)
+    fipList = dbMgr.find_fip_by_state_and_region(state, region)
+    dbMgr.close()
+
+    return fipList
+
+
+def find_region(state, region=None):
+    print(state, region)
+    return None
+
+def QueryStdIO(prompt):
+    inp = None
+    while inp is None:
+        inp = input(prompt + "->")
+        if not inp:
+            return None
+
+        try:
+            choiceInt = int(inp)
+            return choiceInt
+        except:
+            pass
 
 
 if __name__ == '__main__':
@@ -186,34 +232,93 @@ if __name__ == '__main__':
         import argparse
         parser = argparse.ArgumentParser(description='  \033[32mDownload and Analyze NOAA Climate Data\n'
                                                      '  Station Alias and ID must configured in cda.ini\n'
-                                                     '  Use -show_ids to display configured stations\n'
-                                                     '  Use -find_ids to display local stations\033[37m',
+                                                     '\n'
+                                                     '  -find_ids to download station info from NOAA in region <FIPCODE>\n'
+                                                     '  -fipcode  to show/set region used by find_ids\n'
+                                                     '  -config   to display configured stations in ini-file\033[37m',
                                          formatter_class=argparse.RawTextHelpFormatter)
-
         group = parser.add_mutually_exclusive_group()
 
         group.add_argument('-find_ids', action='store_true', default=False,
-                           help='[arg1] - Display Stations within [arg1] distance')
-        group.add_argument('-show_ids', action='store_true', default=False,
-                           help='[arg1] - Display Stations within [arg1] distance')
-        group.add_argument('-getcd', action='store_true', default = False,
-                           help='[arg1] - Get Climate Data for station [arg1]')
+                           help='[radius] - Download NOAA Weather Station IDs within [radius] distance')
+        group.add_argument('-fipcode',  action='store_true', default=False,
+                           help='[state]   - Display or Set <FIPCODE> used by find_ids')
+        group.add_argument('-home',  action='store_true', default=False,
+                           help='[state]   - Display or Set <HOME> lat,long used by find_ids')
+        group.add_argument('-getcd', action='store_true', default=False,
+                           help='[alias]   - Download all available Climate Data for station [alias]')
         parser.add_argument('arg1', action='store', nargs='?', default=None)
+        group.add_argument('-config', action='store_true', default=False,
+                           help='         - Display info on configured stations from ini-file')
         args = parser.parse_args()
 
         noaaObj = NOAA(dict(appCfg['NOAA']))     # NOAA Obj provided with dict from ini file
         station_dict = dict(appCfg['Stations'])  # ini file provides dict of alias:station_id
+
         if args.find_ids:
             dist2home = float(args.arg1) if args.arg1 is not None else 30.0
-            print_stations(noaaObj.get_stations(dist2home))
+            err, station_list = noaaObj.get_stations(dist2home)
+            if err:
+                print(err)
+            else:
+                print_stations(station_list)
+                print(f'home @ {appCfg["NOAA"]["home"]}')
 
-        elif args.show_ids:
-            print('{:^20}{:^16}'.format('alias', 'station_id'))
-            for _k, _v in appCfg['Stations'].items():
-                print(f'{_k:20}: {_v}')
+        elif args.fipcode:
+            if not args.arg1:
+                print(f'fip_code {noaaObj.fip_code}')
+            else:
+                item = None
+                fipItems = find_fipcode(*args.arg1.split(','))
+                while item is None:
+                    for _cnt, _metaData in enumerate(fipItems):
+                        print(f'  [{_cnt:>2d}]  {_metaData.region} {_metaData.qualifier}')
+                    index = QueryStdIO('Select Region')
+                    try:
+                        item = fipItems[index]
+
+                    except IndexError:
+                        print('  Invalid, Requires Integer 0:{}'.format(len(fipItems)))
+                        continue
+                    appCfg['NOAA']['fip_code'] = f'{item.code:05d}'
+                    save_appCfg(appCfg, iniPath)
+                    print(f'  {item.state}, {item.region} {item.qualifier} = {appCfg["NOAA"]["fip_code"]}')
+
+        elif args.home:
+            if not args.arg1:
+                print(f'home {noaaObj.home}')
+            else:
+                lat_long = args.arg1.strip('()').split(',')
+                print(lat_long)
+                try:
+                    new_home = [float(x) for x in lat_long]
+                    new_cfg = '(' + ','.join(['{:.5f}'.format(x) for x in new_home]) + ')'
+                    appCfg['NOAA']['home'] = new_cfg
+                    save_appCfg(appCfg, iniPath)
+
+                except Exception as err:
+                    print(err)
+                    # try:
+                    #     lat_long = [float(x)]
+
+        elif args.config:
+            print('{:^20}{:^20}{:^18}{:^14}{:^10}'.format(
+                'alias', 'station_id', 'lat_long', 'dist2home', 'elev'))
+
+            for _alias, _sid in appCfg['Stations'].items():
+                cfgInfo = f'{_alias:20}: {_sid}'
+
+                err, metaData = noaaObj.station_info(_sid)
+                if err:
+                    infoStr = str(err)
+                else:
+                    infoStr = (','.join([f'{x:3.3f}' for x in metaData.lat_long])
+                               + f'  {metaData.dist2home:> 6.1f} mi'
+                               + f'  {metaData.elev:> 7.1f} ft')
+
+                print(cfgInfo, f'  {infoStr}')
 
         elif args.getcd:
-
             if args.arg1 is None:
                 station_info = '\n'.join(['    ' + x for x in noaa_aliases()])
             else:
@@ -221,7 +326,8 @@ if __name__ == '__main__':
                     station_id = appCfg['Stations'][args.arg1]
 
                 except KeyError:
-                    parser.error('[arg1] must supply station alias:\n' + station_info)
+                    parser.error('[arg1] must supply station alias:\n'
+                                 + '\n'.join(station_dict.keys()))
                     station_id = None
 
                 if station_id:

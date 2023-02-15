@@ -22,6 +22,11 @@ from typing import List
 from collections import namedtuple
 
 # Climate Data Observation
+DBDEF_FIP = [('code',        'INTEGER' 'PRIMARY KEY'),
+             ('state',       'TEXT'),
+             ('region',      'TEXT'),
+             ('qualifier',   'TEXT')]
+
 DBDEF_CDO = [('date',        'TEXT'    'PRIMARY KEY'),
              ('tmax',        'REAL'),
              ('tmin',        'REAL'),
@@ -30,11 +35,12 @@ DBDEF_CDO = [('date',        'TEXT'    'PRIMARY KEY'),
              ('snow',        'REAL'),
              ('snwd',        'REAL')]
 
-DBTYPE_CDO = namedtuple('DBTYPE_CDO', [x[0] for x in DBDEF_CDO], defaults=('',) +  (float('nan'),)*6)
+DBTYPE_FIP = namedtuple('DBTYPE_FIP',[x[0] for x in DBDEF_FIP], defaults=(-1, '', ''))
+DBTYPE_CDO = namedtuple('DBTYPE_CDO', [x[0] for x in DBDEF_CDO],  defaults=('',) +  (float('nan'),)*6)
 
 CDFLDS_NODATE = [x for x in DBTYPE_CDO._fields if x != 'date']   # field names of Climate Data Only, No Date
 CD_NODATE_NPDT = np.dtype([(_key, np.float32) for _key in CDFLDS_NODATE])
-DB_DEFINES = {'DBDEF_CDO': DBDEF_CDO}                 # dbCoupler.__init__() uses to set cmd/def strings
+DB_DEFINES = {'DBDEF_CDO': DBDEF_CDO, 'DBDEF_FIP': DBDEF_FIP}                 # dbCoupler.__init__() uses to set cmd/def strings
 
 
 class dbCoupler:
@@ -59,6 +65,14 @@ class dbCoupler:
     @staticmethod
     def repRowCmd(tblName, tblRow):
         return 'INSERT OR REPLACE INTO {}{}'.format(tblName, tblRow)
+
+    @staticmethod
+    def findCmd(tblName, key_val1, key_val2):
+        # cmd = 'SELECT * FROM FIP_CODES WHERE state = "WA"'
+        cmd = 'SELECT * FROM {} WHERE {} = "{}"'.format(tblName, key_val1[0], key_val1[1])
+        # if key_val2:
+        #     cmd += 'AND {} = {}'.format(*key_val2)
+        return cmd
 
     @staticmethod
     def is_leap_year(year):
@@ -145,7 +159,33 @@ class dbCoupler:
 
         return tbl_years, cd_by_year, missing_data
 
-    #-----CLIMATE DATA TABLE -------
+    #-----   FIP TABLE   -------
+    def find_fip_by_state_and_region(self, val1, val2=None):
+        """
+        """
+        key_val1 = ('state', val1.upper())
+        key_val2 = ('region', val2) if val2 else None
+        tblName = 'FIP_CODES'
+        cmd = dbCoupler.findCmd(tblName, key_val1, key_val2)
+
+        self.cursor.execute(cmd)
+        # return self.cursor.fetchall()
+        return list(map(DBTYPE_FIP._make, self.cursor.fetchall()))
+
+    def wr_fiptable(self, tblName, key, value):
+        """ tblItemList = listOf(CONCEPTDETAILS)
+        """
+        cmd = dbCoupler.newTableCmd(tblName, self.DBDEF_FIP)
+        self.cursor.execute(cmd)
+
+        cmd = dbCoupler.wrRowCmd(tblName, self.DBCMD_FIP)
+
+        for _rowid, row in enumerate(tblItemList):
+            row_data = [getattr(row, _f) for _f in DBTYPE_FIP._fields]
+            self.cursor.execute(cmd, row_data)
+        self.conn.commit()
+
+    # -----CLIMATE DATA TABLE -------
     def wr_cdtable(self, tblName, tblItemList):
         """ tblItemList = listOf(CONCEPTDETAILS)
         """
