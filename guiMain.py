@@ -10,7 +10,6 @@ import numpy as np
 import tkinter as tk
 import tkinter.ttk as ttk
 
-# from noaa import get_noaa_id, get_dataset_v1
 from dbCoupler import dbCoupler
 from guiPlot import guiPlot, dayInt2MMDD, dayInt2Label, PLOT_TYPE
 from guiStyle import guiStyle
@@ -38,7 +37,8 @@ class guiMain(tk.Tk):
         self.dbList = dbList
         self._posXY = pos_tuple
         self._stations = [path.splitext(path.basename(x))[0] for x in self.dbList]
-        self._selected_station = self._stations[0]
+        self._station_index = 0
+        # self._selected_station = self._stations[0]
         # station_id = get_noaa_id(self._selected_station)
 
         self.dbMgr = dbCoupler()
@@ -60,8 +60,8 @@ class guiMain(tk.Tk):
         self.columnconfigure(0, weight=1)            # Expand Widgets in Width
 
         # Row-0, Column-0 : Plot Widget
-        self._plot_widget = guiPlot(self, self._selected_station, self.yrList, self.np_climate_data, figsize=(1000, 400))
-        self._plot_widget.grid(row=0, column=0, rowspan=1, columnspan=7)
+        self._plot_widget = guiPlot(self, self.selected_station, self.yrList, self.np_climate_data, figsize=(1000, 400))
+        self._plot_widget.grid(row=0, column=0, rowspan=1, columnspan=8)
 
         # Column-0, Information Widget
         self._info_text = tk.StringVar()                                          # Col-0, Information Widget
@@ -72,23 +72,34 @@ class guiMain(tk.Tk):
         self._pdfButton = ttk.Button(self, text='PDF', style='red.TButton', width=5, command=self.on_pdfButton)
         self._pdfButton.grid(row=1, column=1, sticky='nse')
 
+        # Column-6, TypeButton (cycles between 3 PLOT_TYPE modes)
         self._TypeButton = tkToggleButton(self, PLOT_TYPE, self.on_TypeButton)
         self._TypeButton.grid(row=1, column=6, sticky='nse')
         self._TypeButton.enum = PLOT_TYPE.ALLDOY
 
-        # Column-2,  ArgSelFrame
+        # Column-2 - Column-4,  ArgSelFrame - REFERENCES TypeButton!
         self._ArgSelFrame = tkArgSelFrame(self, self._TypeButton.enum, self.on_ArgSel, self.on_ArgLimits)
         self._ArgSelFrame.grid(row=1, column=2)
         self._ArgSelFrame.argtype = PLOT_TYPE.ALLDOY
 
         init_yrenum = len(self.yrList) - 1
         self._ArgSelFrame.argvalue = self.yrList[init_yrenum]
+
+        # Column-5, OptionMenu (Climate Data Fields)
         self.cd_names = [x.upper() for x in self.np_climate_data.dtype.names]  # Numpy Structured Array Field Names
         self._ObserMenu = tkOptionMenu(self, self.cd_names, self.cd_names.index('PRCP'), self.on_ObserMenu)
         self._ObserMenu.grid(row=1, column=5, sticky='e')
 
+        # Column-7, StationMenu
+        self._StationMenu = tkOptionMenu(self, self._stations, self._station_index, self.on_StationMenu)
+        self._StationMenu.grid(row=1, column=7, sticky='e')
+
         self._plot_widget.plot(self._TypeButton.enum, self._ObserMenu.selectedItem, init_yrenum)
         self._update_info_text()
+
+    @property
+    def selected_station(self):
+        return self._stations[self._station_index]
 
     def _update_info_text(self):
         cursor_info = self._plot_widget.cursor
@@ -204,9 +215,8 @@ class guiMain(tk.Tk):
             return 0, self.np_climate_data.shape[1] - 1
 
     def on_ObserMenu(self, xItem):
-        """ Activated on changes to SelectionFrame and displays the appropriate Frame.
-            If the current mode doesn't match the ActiveFrame it is hidden via grid_remove()
-            and the appropriate frame is created (if necessary) and then displayed.
+        """ Activated on changes to Observation Menu.
+            Calls guiPlot Widget to delete existing plot and generate a new plot.
         """
         if self._TypeButton.enum == PLOT_TYPE.SNGLDOY:
             plotarg = self._plot_widget.dayenum
@@ -220,6 +230,12 @@ class guiMain(tk.Tk):
         print('guiMain.on_xItem {} {}'.format(xItem, self._ObserMenu.selectedItem))
         self._plot_widget.plot(self._TypeButton.enum, self._ObserMenu.selectedItem, plotarg)
 
+    def on_StationMenu(self, xItem):
+        """ Activated on changes to Station Menu.
+            Calls guiPlot Widget to generate a new plot.
+        """
+        print('guiMain.on_StationMenu {} {}'.format(xItem, self._ObserMenu.selectedItem))
+
     def on_configure(self, event):
         """ Track Position of guiMain AND fix incorrect guiMain width changes made by MPL.
             Changes to ActiveFrame Widget configure may incorrectly change guiMain width.
@@ -231,7 +247,6 @@ class guiMain(tk.Tk):
 
     def mainloop(self, n: int = 0):
         tk.mainloop(n)
-
 
 class tkArgSelFrame(ttk.Frame):
     """ A Container (i.e. Frame) Class that changes gui widgets depending on its argType.

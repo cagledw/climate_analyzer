@@ -1,5 +1,5 @@
 """
-A tkinter GUI Class
+Climate Data Abstraction and Formating Class
 """
 from enum import IntEnum
 from typing import Dict, List, Tuple, TypedDict
@@ -12,8 +12,12 @@ HIST_DATA = TypedDict('HIST_DATA',
                       {'dtype': PLOT_DATA, 'dnames': List[str], 'obs': np.ndarray, 'ma': np.ndarray})
 
 class ClimateDataObj():
-    """A tk Application (i.e. Main/Root Window)
-
+    """ Manage Climate Data for 1 of N locations (i.e. stations)
+        The ctor receives 3D Numpy array of Climate Data and an assocated yrlist.
+        Numpy Climate Data is in the form of [yrs, dayofyr, num_flds]
+          1st dim of Climate Data = yrs & must match the dim of the yrList
+          2nd dim of Climate Data = dayofyr  and is ALWAYS 366
+          3rd dim of Climate Date = numpy structured array, fld names match NOAA names
     """
     @staticmethod
     def get_dnames(dtype: PLOT_DATA) -> List[str]:
@@ -66,10 +70,13 @@ class ClimateDataObj():
             self._np_alldoy_mean[_key] = np.nanmean(np_climate_data[:, :][_key], axis=0)
 
     @property
-    def num_years(self):
-        """
-        """
-        return self._np_climate_data.shape[0]
+    def num_years(self): return self._np_climate_data.shape[0]
+
+    @property
+    def num_days(self): return self._np_climate_data.shape[1]
+
+    @property
+    def station(self): return self._station
 
     def hist_data(self, dtype: PLOT_DATA, day: int) -> HIST_DATA:
         """ Construct a dict of data required for HIST Plot.
@@ -184,11 +191,11 @@ class ClimateDataObj():
 
         if dtype == PLOT_DATA.TEMP:
             dnames = ['tmin', 'tmax']
-            title = f'{self._station} {self._yrList[xorigin.yrenum]}  -  Tmin - Tmax'
+            title = 'Tmin - Tmax'
 
         elif dtype == PLOT_DATA.RAIN:
             dnames = ['prcp']
-            title = f'{self._station} {self._yrList[xorigin.yrenum]}  -  Rain Precipitation'
+            title = 'Rain Precipitation'
         else:
             raise ValueError
 

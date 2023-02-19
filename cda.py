@@ -1,15 +1,14 @@
 """
 Climate Data Analysis.
   Download Data from NOAA Climate Data WebSite and/or Launch tkinter GUI
-  Only Climate Data for locations this Apps's Configuration (*.ini) File can be downloaded
+  Only Data for locations defined in this Apps's Config (*.ini) File can be downloaded
 
   Three options for Climate Data Download:
-    -find_ids : Display Stations and their ID within certain distance of 'Home'
-    -show_ids : Display Stations whose ID is known
+    -find : Display Stations and their ID within certain distance of 'Home'
+    -station  : Display Stations whose ID is known
     -getcd    : download Historical Climate Data for specific Station to sqlite DB
 
-  Otherwise, launches GUI for analysis of data previously stored in sqlite DB.
-
+  Otherwise, launches GUI for analysis of daa previously stored in sqlite DB.
 
 """
 
@@ -27,11 +26,25 @@ from itertools import groupby, accumulate
 
 from noaa import NOAA
 from guiMain import guiMain
-from guiPlot import dayInt2MMDD, dayInt2Label
+from guiPlot import dayInt2MMDD, dayInt2Label, date2enum
 from dbCoupler import dbCoupler, DBTYPE_CDO
 
-fip_dbName = 'fip_codes.db'
+dbName = 'fips_codes.db'
 user_dbPath = 'AppData\\ClimateData'
+
+def QueryStdIO(prompt):
+    inp = None
+    while inp is None:
+        inp = input(prompt + "->")
+        if not inp:
+            return None
+
+        try:
+            choiceInt = int(inp)
+            return choiceInt
+        except:
+            pass
+
 
 def print_stations(station_list):
     """ print station_list to std_out
@@ -45,16 +58,41 @@ def print_stations(station_list):
         elev = f'{_s.elev:>4.0f}'
         print(f'{_s.id:17} {_s.dist2home:>4.1f}mi {elev:>6}ft {_s.mindate.date()} {_s.maxdate.date()} {_s.name[:40]}')
 
+def find_fipcode(state, locale=None):
+    dbfName = os.path.join(os.path.dirname(__file__), dbName)
+
+    dbMgr = dbCoupler()
+    dbMgr.open(dbfName)
+    fipList = dbMgr.find_rgn_by_state_and_locale(state, locale)
+    dbMgr.close()
+
+    return fipList
+
+def find_region_bycode(code):
+    dbfName = os.path.join(os.path.dirname(__file__), dbName)
+
+    dbMgr = dbCoupler()
+    dbMgr.open(dbfName)
+    fipList = dbMgr.find_rgn_by_code(code)
+    dbMgr.close()
+
+    region = fipList.pop()
+    if fipList:
+        raise ValueError   # Only 1 Expected
+    return region
 
 def store_to_db(noaaObj: NOAA, dbPath: str, noaa_id, station_name):
     """ Download NOAA Climate Data from Web Portal & Store in SQLite DB
     """
     dbfName = os.path.join(dbPath, station_name + '.db')
     if os.path.isfile(dbfName):
-        print('File Exists {}'.format(dbname))
+        print('File Exists {}'.format(dbfName))
         return
 
-    noaa_info = noaaObj.get_station(noaa_id)
+    error, noaa_info = noaaObj.station_info(noaa_id)
+    if error:
+        print(str(err))
+        return
 
     dbMgr = dbCoupler()
     dbMgr.open(dbfName)
@@ -65,93 +103,113 @@ def store_to_db(noaaObj: NOAA, dbPath: str, noaa_id, station_name):
         dbMgr.wr_cdtable(str(_yr), cdList)
 
     dbMgr.close()
-    return None
 
-def update_db(alias2id, updateDir, webAccessObj):
+def update_db(alias2id, updateDir, webAccessObj, upd_yrs, verbose=False):
     """
      Scan for Climate DataBase Files in updateDir, and then check each for missing data.
      If missing data is found, attempt Download from NOAA & Update DB.
        Each sub-array of climate data has exactly 366 elements
        non-leap-year sub-array's are expected to be void for Feb-29 and are ignored.
-       Only the two most recent years are checked.
+       Only the years now - upd_yrs are checked.
 
     First, create 'void' list of isnan flags for each day.
     Then identify days that are all nan (void)
     """
+    upd_fldNames = [_name for _name in DBTYPE_CDO._fields if _name != 'date']
     dbMgr = dbCoupler()
+
+    dayenumLim, yrLim = date2enum(date.today())
 
     dbMatch = os.path.join(dbDir, '*.db')
     updateFiles = [os.path.abspath(_f) for _f in glob(dbMatch)]
-
     for dbfName in updateFiles:
         s_alias = os.path.splitext(os.path.basename(dbfName))[0]
         s_id = alias2id[s_alias]
-        print(s_alias, s_id, dbfName)
 
         dbMgr.open(dbfName)
         yrList, np_climate_data, missing_data = dbMgr.rd_climate_data()
 
+        if yrList[-1] != date.today().year:
+            yrList.append(date.today().year)
+
         # Loop Over All Years, climate data is 2D array of records [yrs, days]
-        for _yrenum in range(np_climate_data.shape[0]):
+        for _yrenum in range(np_climate_data.shape[0] - upd_yrs, np_climate_data.shape[0]):
+            totalMissing = 0
+            totalNoUpdate = 0
             chkyear = yrList[_yrenum]
 
-            void = [np.all([np.isnan(x) for x in y]) for y in np_climate_data[_yrenum, :]]
+            new_indx = 0
+            new_vals = None
+
+            # Find db rows with ANY missing data
+            void = [np.any([np.isnan(x) for x in y]) for y in np_climate_data[_yrenum, :]]
             isnan_grpsize = [(_k, sum(1 for _ in _v)) for _k, _v in groupby(void)]
             isnan_dayenum = [0] + list(accumulate([x[1] for x in isnan_grpsize]))
             assert isnan_dayenum[-1] == np_climate_data.shape[1]   # the sum of all grp elements should == 366
 
-            # isnan_grpsize is list of tuples: [(bool, int), ...], those with bool == True are all nan values
             for _grpidx, _isnan_grp in enumerate(isnan_grpsize):
-                dayenum = isnan_dayenum[_grpidx]
-                dayMMDD = dayInt2MMDD(dayenum)
-
                 ismissing = _isnan_grp[0]
                 nummissing = _isnan_grp[1]
-                if ismissing:
-                    if dayMMDD == (2,29) and nummissing == 1 and not dbMgr.is_leap_year(chkyear):
+                dayenum = isnan_dayenum[_grpidx]
+                if _yrenum == len(yrList) - 1 and dayenum == dayenumLim:    # Missing yrenum, dayenum past today?
+                    break
+
+                while (ismissing and nummissing):
+                    if dayenum == 59 and not dbMgr.is_leap_year(chkyear):    # Feb29 AND not LeapYear
+                        dayenum += 1
+                        nummissing -= 1
                         continue
 
-                    update_day = date(chkyear, *dayMMDD)
-                    print(f'    Missing {nummissing} days, starting @ {update_day}')
+                    if new_vals is None:
+                        new_vals = webAccessObj.get_dataset_v1(s_id, date(chkyear, 1, 1))
 
-                    update_vals = webAccessObj.get_dataset_v1(s_id, update_day)
+                    missingDate = date(chkyear, *dayInt2MMDD(dayenum))
+                    while True:
+                        newCDO_date = date.fromisoformat(new_vals[new_indx].date)
+                        if newCDO_date >= missingDate or new_indx + 1 >= len(new_vals):
+                            break
+                        else:
+                            new_indx += 1
 
-                    if not update_vals:
-                        print('    No Updates for {}'.format(update_day))
+                    if newCDO_date == missingDate:                           # New Download Date Matches Missing
+                        current_vals = [np_climate_data[_yrenum, dayenum][_fld]
+                                        for _fld in upd_fldNames]
+
+                        newcd_vals = [getattr(new_vals[new_indx], _fld)
+                                      for _fld in upd_fldNames]
+
+                        current_isnan = [np.isnan(x) for x in current_vals]
+                        new_isvalid = [bool(_value) for _value in newcd_vals]
+                        isnan_and_isvalid = [all(test_tuple) for test_tuple in zip(new_isvalid, current_isnan)]
+                        if all(current_isnan):
+                            dbMgr.add_climate_data(str(missingDate.year), [new_vals[new_indx]])
+                            print(f'    {s_alias:10} update {missingDate} All New Data')
+
+                        elif any(isnan_and_isvalid):
+                            upd_dict = dict(zip(upd_fldNames, newcd_vals))
+
+                            dbMgr.upd_climate_data(str(missingDate.year),
+                                                   {'date': missingDate.isoformat()},
+                                                   upd_dict)
+                            info = ', '.join([f'{_fld}:{_val}' for _change, _fld, _val
+                                              in zip(isnan_and_isvalid, upd_fldNames, newcd_vals) if _change])
+                            print(f'    {s_alias:10} update {missingDate} {info}')
+                        else:
+                            totalNoUpdate += 1
                     else:
-                        for _val in update_vals:
-                            info = ', '.join([f'{_k}:{_v}' for _k, _v in _val._asdict().items() if _k != 'date'])
-                            print('    Add {}: '.format(_val.date) + info)
+                        totalMissing += 1
 
-                        dbMgr.wr_cdtable(str(chkyear), update_vals)
+                    dayenum += 1
+                    nummissing -= 1
 
-        chkyear = date.today().year
-        if chkyear not in yrList:
-            print(chkyear)
+                    if _yrenum == np_climate_data.shape[0] - 1 and dayenum > dayenumLim:
+                        break
+            updInfo = f'    {s_alias:10} Year {chkyear}'
+            updInfo += f' Partial Data Only: {totalNoUpdate} days, Missing Days: {totalMissing}'
+            print(updInfo)
 
-            update_day = date(chkyear, *dayInt2MMDD(0))     # Jan 1
-            update_vals = get_dataset_v1(station_id, update_day)
-            print(station_id, update_day)
-
-            if not update_vals:
-                print('  No Updates for {}'.format(update_day))
-
-            else:
-                for _val in update_vals:
-                    print(_val._asdict())
-
-                dbMgr.wr_cdtable(str(chkyear), update_vals)
         dbMgr.close()
     return updateFiles
-
-    # for dbfName in dbList:
-    #     station_name = os.path.splitext(os.path.basename(dbfName))[0]
-    #     station_id = get_noaa_id(station_name)
-    #     print(f'    Checking {station_name}, {station_id}')
-    #
-    #     dbMgr.open(dbfName)
-    #     yrList, np_climate_data, missing_data = dbMgr.rd_climate_data()
-
 
 def get_appCfg(iniFilePath: str) -> RawConfigParser:
     """ Attempt to Open a Configuration iniFile and create one if Non-Existent
@@ -166,54 +224,32 @@ def get_appCfg(iniFilePath: str) -> RawConfigParser:
 
         config['NOAA'] = {}
         config['NOAA']['cdo_token'] = ''
-        config['NOAA']['fip_code'] = '53033'
-        config['NOAA']['home_lat_long'] = str((47.60923, -122.16787))
+        config['NOAA']['findrgn'] = '53033'
+        config['NOAA']['home'] = str((47.60923, -122.16787))
+        config['NOAA']['date_1st'] = '2000-01-01'
+        config['NOAA']['date_last'] = 'now'
+        config['NOAA']['upd_yrs'] = '2'
 
         config['Stations'] = {}
         with open(iniFilePath, 'w') as fp:
             fp.write(';  Climate Data Analysis Configuration\n')
             fp.write(';  Obtain cdo_token from https://www.ncdc.noaa.gov/cdo-web/token\n')
-            fp.write(';  Lookup FIPS State+County Codes @ \n')
-            fp.write(';     https://en.wikipedia.org/wiki/List_of_United_States_FIPS_codes_by_county\n')
+            fp.write(';  [Stations] Must Be Populated In Order to Download their Climate Data\n')
+            fp.write(';     <alias> = <id>            # <alias> may be any convenient string\n')
+            fp.write(';\n')
+            fp.write(';  -find uses <code>, <home>, <date_1st>, <date_last>\n')
+
             config.write(fp)
         fp.close()
     return config
 
-def save_appCfg(cfgParser, iniFilePath: str):
+def save_appCfg(cfgParser: RawConfigParser, iniFilePath: str):
     try:
         with open(iniFilePath, 'w') as wfp:
             cfgParser.write(wfp)
 
     except IOError:
         print('Error')
-
-def find_fipcode(state, region=None):
-    dbfName = os.path.join(os.path.dirname(__file__), fip_dbName)
-
-    dbMgr = dbCoupler()
-    dbMgr.open(dbfName)
-    fipList = dbMgr.find_fip_by_state_and_region(state, region)
-    dbMgr.close()
-
-    return fipList
-
-
-def find_region(state, region=None):
-    print(state, region)
-    return None
-
-def QueryStdIO(prompt):
-    inp = None
-    while inp is None:
-        inp = input(prompt + "->")
-        if not inp:
-            return None
-
-        try:
-            choiceInt = int(inp)
-            return choiceInt
-        except:
-            pass
 
 
 if __name__ == '__main__':
@@ -233,29 +269,30 @@ if __name__ == '__main__':
         parser = argparse.ArgumentParser(description='  \033[32mDownload and Analyze NOAA Climate Data\n'
                                                      '  Station Alias and ID must configured in cda.ini\n'
                                                      '\n'
-                                                     '  -find_ids to download station info from NOAA in region <FIPCODE>\n'
-                                                     '  -fipcode  to show/set region used by find_ids\n'
-                                                     '  -config   to display configured stations in ini-file\033[37m',
+                                                     '  -find    download station info from NOAA in region <FIPSRGN>\n'
+                                                     '  -home    set/show <LAT,LONG> used by find\n'
+                                                     '  -findrgn set/show region <FIPSRGN> used by find\n'
+                                                     '  -station show configured stations from ini-file\033[37m',
                                          formatter_class=argparse.RawTextHelpFormatter)
         group = parser.add_mutually_exclusive_group()
 
-        group.add_argument('-find_ids', action='store_true', default=False,
-                           help='[radius] - Download NOAA Weather Station IDs within [radius] distance')
-        group.add_argument('-fipcode',  action='store_true', default=False,
-                           help='[state]   - Display or Set <FIPCODE> used by find_ids')
+        group.add_argument('-find', action='store_true', default=False,
+                           help='[radius]  - Download NOAA Weather Stations Info within [radius] of <HOME>')
+        group.add_argument('-findrgn', action='store_true', default=False,
+                           help='[state]   - Display or Set FIPS Region <FIPSRGN> used by find')
         group.add_argument('-home',  action='store_true', default=False,
-                           help='[state]   - Display or Set <HOME> lat,long used by find_ids')
+                           help='[lat,long]- Display or Set <HOME> lat,long used by find')
         group.add_argument('-getcd', action='store_true', default=False,
                            help='[alias]   - Download all available Climate Data for station [alias]')
         parser.add_argument('arg1', action='store', nargs='?', default=None)
-        group.add_argument('-config', action='store_true', default=False,
-                           help='         - Display info on configured stations from ini-file')
+        group.add_argument('-station', action='store_true', default=False,
+                           help='          - Display info on configured stations from ini-file')
         args = parser.parse_args()
 
         noaaObj = NOAA(dict(appCfg['NOAA']))     # NOAA Obj provided with dict from ini file
         station_dict = dict(appCfg['Stations'])  # ini file provides dict of alias:station_id
 
-        if args.find_ids:
+        if args.find:
             dist2home = float(args.arg1) if args.arg1 is not None else 30.0
             err, station_list = noaaObj.get_stations(dist2home)
             if err:
@@ -264,9 +301,10 @@ if __name__ == '__main__':
                 print_stations(station_list)
                 print(f'home @ {appCfg["NOAA"]["home"]}')
 
-        elif args.fipcode:
+        elif args.findrgn:
             if not args.arg1:
-                print(f'fip_code {noaaObj.fip_code}')
+                rgnInfo = find_region_bycode(noaaObj.findrgn)
+                print(f'code {noaaObj.findrgn} = {rgnInfo.state}, {rgnInfo.region} {rgnInfo.qualifier}')
             else:
                 item = None
                 fipItems = find_fipcode(*args.arg1.split(','))
@@ -280,9 +318,9 @@ if __name__ == '__main__':
                     except IndexError:
                         print('  Invalid, Requires Integer 0:{}'.format(len(fipItems)))
                         continue
-                    appCfg['NOAA']['fip_code'] = f'{item.code:05d}'
+                    appCfg['NOAA']['code'] = f'{item.code:05d}'
                     save_appCfg(appCfg, iniPath)
-                    print(f'  {item.state}, {item.region} {item.qualifier} = {appCfg["NOAA"]["fip_code"]}')
+                    print(f'  {item.state}, {item.region} {item.qualifier} = {appCfg["NOAA"]["code"]}')
 
         elif args.home:
             if not args.arg1:
@@ -298,10 +336,8 @@ if __name__ == '__main__':
 
                 except Exception as err:
                     print(err)
-                    # try:
-                    #     lat_long = [float(x)]
 
-        elif args.config:
+        elif args.station:
             print('{:^20}{:^20}{:^18}{:^14}{:^10}'.format(
                 'alias', 'station_id', 'lat_long', 'dist2home', 'elev'))
 
@@ -315,8 +351,8 @@ if __name__ == '__main__':
                     infoStr = (','.join([f'{x:3.3f}' for x in metaData.lat_long])
                                + f'  {metaData.dist2home:> 6.1f} mi'
                                + f'  {metaData.elev:> 7.1f} ft')
-
                 print(cfgInfo, f'  {infoStr}')
+            print(f'home @ {appCfg["NOAA"]["home"]}')
 
         elif args.getcd:
             if args.arg1 is None:
@@ -335,7 +371,8 @@ if __name__ == '__main__':
                 else:
                     raise ValueError
         else:
-            dbFiles = update_db(station_dict, dbDir, noaaObj)
+            upd_yrs = int(appCfg['NOAA']['upd_yrs'])
+            dbFiles = update_db(station_dict, dbDir, noaaObj, upd_yrs)
 
             gui = guiMain(dbFiles, (800, 100))  # Gui Setup
             gui.mainloop()

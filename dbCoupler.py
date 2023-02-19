@@ -59,8 +59,9 @@ class dbCoupler:
 
     @staticmethod
     def updRowCmd(tblName, whereDict, setDict):
-        whereText = ','.join('{} = {}'.format(_k, _v) for _k, _v in whereDict.items())
-        return 'UPDATE {} SET '.format(tblName, whereText)
+        setText = ','.join('{} = {}'.format(_k, _v) for _k, _v in setDict.items())
+        whereText = ','.join('{} = "{}"'.format(_k, _v) for _k, _v in whereDict.items())
+        return 'UPDATE "{}" SET {} WHERE {}'.format(tblName, setText, whereText)
 
     @staticmethod
     def repRowCmd(tblName, tblRow):
@@ -68,11 +69,7 @@ class dbCoupler:
 
     @staticmethod
     def findCmd(tblName, key_val1, key_val2):
-        # cmd = 'SELECT * FROM FIP_CODES WHERE state = "WA"'
-        cmd = 'SELECT * FROM {} WHERE {} = "{}"'.format(tblName, key_val1[0], key_val1[1])
-        # if key_val2:
-        #     cmd += 'AND {} = {}'.format(*key_val2)
-        return cmd
+        return 'SELECT * FROM {} WHERE {} = "{}"'.format(tblName, key_val1[0], key_val1[1])
 
     @staticmethod
     def is_leap_year(year):
@@ -160,13 +157,23 @@ class dbCoupler:
         return tbl_years, cd_by_year, missing_data
 
     #-----   FIP TABLE   -------
-    def find_fip_by_state_and_region(self, val1, val2=None):
+    def find_rgn_by_state_and_locale(self, val1, val2=None):
         """
         """
         key_val1 = ('state', val1.upper())
         key_val2 = ('region', val2) if val2 else None
         tblName = 'FIP_CODES'
         cmd = dbCoupler.findCmd(tblName, key_val1, key_val2)
+
+        self.cursor.execute(cmd)
+        return list(map(DBTYPE_FIP._make, self.cursor.fetchall()))
+
+    def find_rgn_by_code(self, val1, val2=None):
+        """
+        """
+        key_val1 = ('code', int(val1))
+        tblName = 'FIP_CODES'
+        cmd = dbCoupler.findCmd(tblName, key_val1, None)
 
         self.cursor.execute(cmd)
         # return self.cursor.fetchall()
@@ -195,7 +202,7 @@ class dbCoupler:
         cmd = dbCoupler.wrRowCmd(tblName, self.DBCMD_CDO)
 
         for _rowid, row in enumerate(tblItemList):
-            row_data  = [getattr(row, _f) for _f in DBTYPE_CDO._fields]
+            row_data = [getattr(row, _f) for _f in DBTYPE_CDO._fields]
             self.cursor.execute(cmd, row_data)
         self.conn.commit()
 
@@ -204,12 +211,20 @@ class dbCoupler:
                             ' FROM "{}"'.format(tblName))
         return map(DBTYPE_CDO._make, self.cursor.fetchall())
 
-    def add_climate_data(self, tblName, tblItemList):
-        """ Add rows to an existing table, fail on overwrite of existing key
+    def add_climate_data(self, tblname, tblitemlist):
+        """ add rows to an existing table, fail on overwrite of existing key
         """
-        cmd = dbCoupler.addRowCmd(tblName, self.DBCMD_CDO)
+        cmd = dbCoupler.wrRowCmd(tblname, self.DBCMD_CDO)
 
-        for _rowid, row in enumerate(tblItemList):
+        for _rowid, row in enumerate(tblitemlist):
             row_data  = [getattr(row, _f) for _f in DBTYPE_CDO._fields]
             self.cursor.execute(cmd, row_data)
+        self.conn.commit()
+
+    def upd_climate_data(self, tblName, where_dict, set_dict):
+        """ Update Rows in tblname where rows match where dict
+        """
+        cmd = self.updRowCmd(tblName, where_dict, set_dict)
+
+        self.cursor.execute(cmd)
         self.conn.commit()

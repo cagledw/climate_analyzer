@@ -1,7 +1,7 @@
 """
 NOAA Object for Download of NOAA Climate Data via Internet.
 Two data types are central to accessing Climate Data:
-  DBTYPE_CDO : represents 1 day of Climate Data for 1 location
+  DBTYPE_CDO : represents 1 day of Climate Data for 1 location (i.e. station)
   STATION_T  : represents a location, includes noaa recognized id + other meta deta
 """
 import os
@@ -11,13 +11,12 @@ import requests
 import numpy as np
 
 from glob import glob
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from collections import namedtuple
 from haversine import haversine, Unit
 from dbCoupler import DBTYPE_CDO
+from typing import Dict, List, Tuple
 
-
-# HomeLoc = [47.60923, -122.16787]   # Lat & Long of HomeLoc
 STATION_T = namedtuple('STATION_T',  ['id', 'name', 'lat_long', 'elev', 'mindate', 'maxdate', 'dist2home'])
 
 CDFLDS_NODATE = [x for x in DBTYPE_CDO._fields if x != 'date']   # field names of Climate Data Only, No Date
@@ -32,9 +31,12 @@ class NOAA():
         NOAA's Web-Site requires a 'cdo_token' to access its data.
         The ctor for this class must be supplied with the cdo_token.
     """
-    def __init__(self, cfgDict):
+    def __init__(self, cfgDict: Dict[str, str]):
         self._cdo_token = cfgDict['cdo_token']
-        self._fip_code = cfgDict['fip_code']
+        self._findrgn = cfgDict['findrgn']
+        self._date_1st = date.fromisoformat(cfgDict['date_1st'])
+        self._date_last = date.today() if cfgDict['date_last'] == 'now' \
+            else date.fromisoformat(cfgDict['date_last'])
 
         homeCoords = cfgDict['home'].strip('()').split(',')
         self.home_coords = [float(x) for x in homeCoords]
@@ -44,8 +46,8 @@ class NOAA():
         return '(' + ','.join(['{}'.format(x) for x in self.home_coords]) + ')'
 
     @property
-    def fip_code(self):
-        return self._fip_code
+    def findrgn(self):
+        return self._findrgn
 
     def station_info(self, station_id):
         header = {'token': self._cdo_token}
@@ -83,7 +85,7 @@ class NOAA():
 
     def get_stations(self, dist2home: float):
         """  Returns list of STATION_T within dist2home miles of home_lat_long.
-             Only stations within the geographic area defined by home_fips_loc returned.
+             Only stations within the geographic area defined by findrgn are returned.
         """
         home_coords = self.home.strip('()')
         home_lat_long = [float(x) for x in home_coords.split(',')]
@@ -91,7 +93,7 @@ class NOAA():
         results = []
         header = {'token': self._cdo_token}
         uri = 'cdo-web/api/v2/{}?locationid={}&limit=1000'.format('stations',
-                                                                  f'FIPS:{self.fip_code}')
+                                                                  f'FIPS:{self.findrgn}')
         offset = 0
         done = False
         errStatus = None
@@ -114,13 +116,13 @@ class NOAA():
                 done = True
 
             if res.status_code == 200:
-                meta = res.json()['metadata']
+                # meta = res.json()['metadata']
                 data = res.json()['results']
 
                 for _station in data:
                     mindate = datetime.strptime(_station['mindate'], "%Y-%m-%d")
                     maxdate = datetime.strptime(_station['maxdate'], "%Y-%m-%d")
-                    if maxdate.year < date_filter_max or mindate.year > 2000:
+                    if maxdate.year < self._date_last.year or mindate.year > self._date_1st.year:
                         continue
 
                     sta_lat_long = (_station['latitude'], _station['longitude'])
@@ -188,12 +190,12 @@ class NOAA():
                     data_indexes = [no_quotes.index(item) for item in hcdd_flds]
 
                     date_index = no_quotes.index('DATE')
-                    station_index = no_quotes.index('STATION')
+                    # station_index = no_quotes.index('STATION')
 
                     first_line = False
                 else:
-                    if (_l):
-                        cd_dict = {'date' : no_quotes[date_index]}
+                    if _l:
+                        cd_dict = {'date': no_quotes[date_index]}
                         for _idx, _fld in enumerate(hcdd_flds):
                             try: cd_dict[_fld.lower()] = no_quotes[data_indexes[_idx]]
                             except: cd_dict[_fld.lower()] = float('nan')
@@ -209,7 +211,7 @@ class NOAA():
         """
         noaa_url = 'https://www.ncei.noaa.gov/cdo-web/api/v2/data'
 
-        limit_count = 1000
+        # limit_count = 1000
         header = {'token': CDO_TOKEN}
         hcdd_flds = ['TMAX', 'TMIN', 'TAVG', 'PRCP', 'SNOW', 'SNWD']
         data_by_year = {}

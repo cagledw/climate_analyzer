@@ -46,11 +46,33 @@ def dayInt2Label(day):
     return f'{mmlabels[month_int]}-{day+1:02d}'
 
 def dayInt2MMDD(day):
+    if day > 365:
+        raise ValueError
+
     month_int = 0
     while day > mm2days[month_int]-1:
         day -= mm2days[month_int]
         month_int += 1
     return month_int+1, day+1
+
+def date2enum(dayDate: date | str):
+    dayenum = 0
+    if type(dayDate) == date:
+        yr, mm, dd = dayDate.year, dayDate.month, dayDate.day
+    elif type(dayDate) == str:
+        yr, mm, dd = dayDate.split('-')
+    else:
+        raise ValueError
+
+    for indx in range(12):
+        if mm == 1:
+            break
+        else:
+            mm -= 1
+            dayenum += mm2days[indx]
+    dayenum += dd - 1
+    return dayenum, int(yr)
+
 
 class guiPlot(FigureCanvasTk):
     """ NOT a tk Widget, instead a matplotlib derived object that embeds a tk.canvas.
@@ -469,14 +491,15 @@ class guiPlot(FigureCanvasTk):
         else:
             xorigin_yr = self._yrenum
             xorigin_mm = 0
+        originYear = self._yrList[xorigin_yr]
         self._doy_xorigin = DATE_ENUM(xorigin_yr, self._daysum[xorigin_mm])
 
         # Configure X-Axis Ticks & Labels Based on xorigin
         #  xorder = a list of enumerated months, starting from doy_xorigin
         month_1 = self._daysum.index(self._doy_xorigin.dayenum)
         xorder = list(range(month_1, 12)) + list(range(0, month_1))
-
         tics = []
+
         for x in range(1, 13):
             items = [xorder[y] for y in range(x)]
             tics.append(sum([mm2days[y] for y in items]))
@@ -484,6 +507,19 @@ class guiPlot(FigureCanvasTk):
         xlabels = [mmlabels[x] for x in xorder]
         self._ax0.set_xticks(tics)
         self._ax0.set_xticklabels(xlabels)
+
+        jan1 = 1.0 - int(self._doy_xorigin.dayenum)/int(self._ClimateDataObj.num_days)
+        self._ax0.text(jan1/2, -.1, originYear, transform = self._ax0.transAxes, fontsize = 10)
+
+        if jan1 != 1.0:
+            markYear = mpl.lines.Line2D([jan1, jan1], [-.1, 0], transform = self._ax0.transAxes, color = 'k', lw = 0.7, clip_on = False)
+            self._ax0.add_line(markYear)
+
+            title_period = f'{self._yrList[xorigin_yr]}-{plotYear}'
+            self._ax0.text(jan1/2 + 0.5, -.1, plotYear, transform = self._ax0.transAxes, fontsize = 10)
+
+        else:
+            title_period = f'{plotYear}'
 
         # Add Y-Axis Values depending on plt_dtype
         self._plty = self._ClimateDataObj.alldoy_data(plt_dtype, self._doy_xorigin)
@@ -528,8 +564,8 @@ class guiPlot(FigureCanvasTk):
             lineSegs = LineCollection(self._plty['obs'], colors=[pltcolor1] * Mpts)
             self._ax0.add_collection(lineSegs)
 
-            spec = {'tmin': {'color': pltcolor4, 'label': 'tmin', 'linewidth': 0.5},
-                    'tmax': {'color': pltcolor5, 'label': 'tmax', 'linewidth': 0.5}}
+            spec = {'tmin': {'color': pltcolor4, 'label': r'$\mu$ (tmin)', 'linewidth': 0.5},
+                    'tmax': {'color': pltcolor5, 'label': r'$\mu$ (tmax)', 'linewidth': 0.5}}
 
             for _name, _y in zip(self._plty['dnames'], self._plty['ltmean']):
                 x = np.arange(len(_y))
@@ -538,8 +574,9 @@ class guiPlot(FigureCanvasTk):
             raise ValueError
 
         self._ax0.set_xlim(0, 366)
-        self._ax0.legend(loc=(0.0, 1.0))
-        self._ax0.set_title(self._plty['title'])
+        self._ax0.legend(loc=(0.0, 1.0), labelspacing=.1)
+        self._ax0.set_title(f'{self._ClimateDataObj.station}   {title_period} {self._plty["title"]}')
+        # self._plty['title]
 
     def plot_histo(self, plt_dtype: PLOT_DATA, dayenum: int, plt_opt):
         """ Plot Generation for Histogram of Single Day of Year
