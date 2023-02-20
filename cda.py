@@ -111,6 +111,8 @@ def update_db(alias2id, updateDir, webAccessObj, upd_yrs, verbose=False):
        Each sub-array of climate data has exactly 366 elements
        non-leap-year sub-array's are expected to be void for Feb-29 and are ignored.
        Only the years now - upd_yrs are checked.
+
+     Returns: list of dbFiles discovered
     """
     dayenumLim, yrLim = date2enum(date.today())     # Update Scan Limit
 
@@ -199,7 +201,8 @@ def update_db(alias2id, updateDir, webAccessObj, upd_yrs, verbose=False):
 
                         elif any(isnan_and_isvalid):
                             loginfo = 'Revise'
-                            upd_dict = dict(zip(upd_fldNames, newcd_vals))
+                            upd_dict = dict([(_k, _v) for _k, _v in zip(upd_fldNames, newcd_vals) if _v])
+                            # upd_dict = dict(zip(upd_fldNames, newcd_vals))
                             dbMgr.upd_climate_data(str(missingDate.year),
                                                    {'date': missingDate.isoformat()},
                                                    upd_dict)
