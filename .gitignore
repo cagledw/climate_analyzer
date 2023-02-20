@@ -1,6 +1,7 @@
 *~
 *.pyc
 *.py#
+.ini
 .idea
 .swp
 doc
