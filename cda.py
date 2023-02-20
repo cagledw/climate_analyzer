@@ -16,6 +16,7 @@ import re
 import os
 import sys
 import copy
+import logging
 import numpy as np
 from configparser import RawConfigParser
 
@@ -44,7 +45,6 @@ def QueryStdIO(prompt):
             return choiceInt
         except:
             pass
-
 
 def print_stations(station_list):
     """ print station_list to std_out
@@ -111,9 +111,6 @@ def update_db(alias2id, updateDir, webAccessObj, upd_yrs, verbose=False):
        Each sub-array of climate data has exactly 366 elements
        non-leap-year sub-array's are expected to be void for Feb-29 and are ignored.
        Only the years now - upd_yrs are checked.
-
-    First, create 'void' list of isnan flags for each day.
-    Then identify days that are all nan (void)
     """
     upd_fldNames = [_name for _name in DBTYPE_CDO._fields if _name != 'date']
     dbMgr = dbCoupler()
@@ -183,7 +180,7 @@ def update_db(alias2id, updateDir, webAccessObj, upd_yrs, verbose=False):
                         isnan_and_isvalid = [all(test_tuple) for test_tuple in zip(new_isvalid, current_isnan)]
                         if all(current_isnan):
                             dbMgr.add_climate_data(str(missingDate.year), [new_vals[new_indx]])
-                            print(f'    {s_alias:10} update {missingDate} All New Data')
+                            ClimateData_log.info(f'    {s_alias:10} update {missingDate} All New Data')
 
                         elif any(isnan_and_isvalid):
                             upd_dict = dict(zip(upd_fldNames, newcd_vals))
@@ -193,7 +190,9 @@ def update_db(alias2id, updateDir, webAccessObj, upd_yrs, verbose=False):
                                                    upd_dict)
                             info = ', '.join([f'{_fld}:{_val}' for _change, _fld, _val
                                               in zip(isnan_and_isvalid, upd_fldNames, newcd_vals) if _change])
-                            print(f'    {s_alias:10} update {missingDate} {info}')
+
+                            ClimateData_log.info(f'    {s_alias:10} update {missingDate} {info}')
+                            # print(f'    {s_alias:10} update {missingDate} {info}')
                         else:
                             totalNoUpdate += 1
                     else:
@@ -251,6 +250,11 @@ def save_appCfg(cfgParser: RawConfigParser, iniFilePath: str):
     except IOError:
         print('Error')
 
+class cdaLogFilter(logging.Filter):
+    def filter(self, record):
+        test = record.module == __file__
+        return test 
+
 
 if __name__ == '__main__':
 
@@ -260,6 +264,18 @@ if __name__ == '__main__':
     dbDir = os.path.expandvars(appCfg['Paths']['dbDir'])
     cdo_token = appCfg['NOAA']['cdo_token']
 
+    # Logging
+    logPath = os.path.join(dbDir, 'DownLoads.log')
+    ClimateData_log = logging.getLogger(__name__)
+    ClimateData_log.setLevel(logging.INFO)
+    ClimateData_fmtr = logging.Formatter('%(asctime)s %(message)s')
+
+    fh = logging.FileHandler(logPath, mode='a')
+    fh.setLevel(logging.INFO)
+    fh.setFormatter(ClimateData_fmtr)
+    ClimateData_log.addHandler(fh)
+
+    # Command Line Processing
     if not cdo_token:
         print(f'Error: {iniPath} must supply a cdo_token')
         print('See: https://www.ncdc.noaa.gov/cdo-web/token')
