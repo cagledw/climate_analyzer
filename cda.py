@@ -19,6 +19,7 @@ import copy
 import logging
 import numpy as np
 from configparser import RawConfigParser
+from ClimateDataObj import ClimateDataObj, PLOT_DATA
 
 from glob import glob
 # from collections import namedtuple
@@ -104,132 +105,6 @@ def store_to_db(noaaObj: NOAA, dbPath: str, noaa_id, station_name):
 
     dbMgr.close()
 
-def update_db(alias2id, updateDir, webAccessObj, upd_yrs, verbose=False):
-    """
-     Scan for Climate DataBase Files in updateDir, and then check each for missing data.
-     If missing data is found, attempt Download from NOAA & Update DB.
-       Each sub-array of climate data has exactly 366 elements
-       non-leap-year sub-array's are expected to be void for Feb-29 and are ignored.
-       Only the years now - upd_yrs are checked.
-
-     Returns: list of dbFiles discovered
-    """
-    dayenumLim, yrLim = date2enum(date.today())     # Update Scan Limit
-
-    upd_fldNames = [_name for _name in DBTYPE_CDO._fields if _name != 'date']
-    dbMgr = dbCoupler()
-
-    dbMatch = os.path.join(dbDir, '*.db')
-    updateFiles = [os.path.abspath(_f) for _f in glob(dbMatch)]
-    for dbfName in updateFiles:
-        s_alias = os.path.splitext(os.path.basename(dbfName))[0]
-        s_id = alias2id[s_alias]
-
-        dbMgr.open(dbfName)
-        yrList, np_climate_data, missing_data = dbMgr.rd_climate_data()
-        print(f'  {s_alias:10} Years: {yrList[0]} - {yrList[-1]}')
-
-        if yrList[-1] != date.today().year:
-            yrList.append(date.today().year)
-
-        # Loop Over All Years, climate data is 2D array of records [yrs, days]
-        stationStatusDict = {}
-        for _yrenum in range(np_climate_data.shape[0] - upd_yrs, np_climate_data.shape[0]):
-            chkyear = yrList[_yrenum]
-            yrstatus = {'Valid': 0, 'Partial': 0, 'Missing': 0}
-
-            new_indx = 0
-            new_vals = None
-
-            # Find db rows with ANY missing data
-            void = [np.any([np.isnan(x) for x in y]) for y in np_climate_data[_yrenum, :]]
-            isnan_grpsize = [(_k, sum(1 for _ in _v)) for _k, _v in groupby(void)]
-            isnan_dayenum = [0] + list(accumulate([x[1] for x in isnan_grpsize]))
-            assert isnan_dayenum[-1] == np_climate_data.shape[1]   # the sum of all grp elements should == 366
-
-            for _grpidx, _isnan_grp in enumerate(isnan_grpsize):
-                ismissing = _isnan_grp[0]
-                nummissing = _isnan_grp[1]
-
-                dayenum = isnan_dayenum[_grpidx]
-                if _yrenum == len(yrList) - 1 and dayenum == dayenumLim:      # yrenum, dayenum past today?
-                    break
-
-                if not ismissing:
-                    yrstatus['Valid'] += nummissing
-                    continue
-
-                while nummissing:
-                    if dayenum == 59 and not dbMgr.is_leap_year(chkyear):     # Skip Feb29 if not LeapYear
-                        dayenum += 1
-                        nummissing -= 1
-                        continue
-
-                    current_vals = [np_climate_data[_yrenum, dayenum][_fld]   # This day's current Climate Data
-                                    for _fld in upd_fldNames]
-                    current_isnan = [np.isnan(x) for x in current_vals]
-
-                    if new_vals is None:
-                        new_vals = webAccessObj.get_dataset_v1(s_id, date(chkyear, 1, 1))
-
-                    missingDate = date(chkyear, *dayInt2MMDD(dayenum))
-                    while True:
-                        newCDO_date = date.fromisoformat(new_vals[new_indx].date)
-                        if newCDO_date >= missingDate or new_indx + 1 >= len(new_vals):
-                            break
-                        else:
-                            new_indx += 1
-
-                    if newCDO_date == missingDate:                           # New Download Date Matches Missing
-                        newcd_vals = [getattr(new_vals[new_indx], _fld)
-                                      for _fld in upd_fldNames]
-
-                        new_isvalid = [bool(_value) for _value in newcd_vals]
-                        isnan_and_isvalid = [all(test_tuple) for test_tuple in zip(new_isvalid, current_isnan)]
-
-                        if all(new_isvalid):
-                            yrstatus['Valid'] += 1
-                        else:
-                            yrstatus['Partial'] += 1
-
-                        info = ', '.join([f'{_fld}:{_val}' for _change, _fld, _val
-                                          in zip(isnan_and_isvalid, upd_fldNames, newcd_vals) if _change])
-
-                        if all(current_isnan):
-                            loginfo = 'AddNew'
-                            dbMgr.add_climate_data(str(missingDate.year), [new_vals[new_indx]])
-
-                        elif any(isnan_and_isvalid):
-                            loginfo = 'Revise'
-                            upd_dict = dict([(_k, _v) for _k, _v in zip(upd_fldNames, newcd_vals) if _v])
-                            # upd_dict = dict(zip(upd_fldNames, newcd_vals))
-                            dbMgr.upd_climate_data(str(missingDate.year),
-                                                   {'date': missingDate.isoformat()},
-                                                   upd_dict)
-                        else:
-                            loginfo = None
-
-                        if loginfo:
-                            ClimateData_log.info(f'{loginfo} {s_alias:10} {missingDate} {info}')
-                    else:
-                        if all(current_isnan):
-                            yrstatus['Missing'] += 1
-                        else:
-                            yrstatus['Partial'] += 1
-
-                    dayenum += 1
-                    nummissing -= 1
-
-                    if _yrenum == np_climate_data.shape[0] - 1 and dayenum > dayenumLim:
-                        break
-            stationStatusDict[chkyear] = yrstatus
-
-        for _yr, _stat in stationStatusDict.items():
-            print(f'{_yr:>19}: ' + ','.join(f'{_k}:{_v:>3}' for _k, _v in _stat.items()))
-
-        dbMgr.close()
-    return updateFiles
-
 def get_appCfg(iniFilePath: str) -> RawConfigParser:
     """ Attempt to Open a Configuration iniFile and create one if Non-Existent
     """
@@ -270,11 +145,6 @@ def save_appCfg(cfgParser: RawConfigParser, iniFilePath: str):
     except IOError:
         print('Error')
 
-class cdaLogFilter(logging.Filter):
-    def filter(self, record):
-        test = record.module == __file__
-        return test 
-
 
 if __name__ == '__main__':
 
@@ -283,17 +153,6 @@ if __name__ == '__main__':
     appCfg = get_appCfg(os.path.join(iniPath))
     dbDir = os.path.expandvars(appCfg['Paths']['dbDir'])
     cdo_token = appCfg['NOAA']['cdo_token']
-
-    # Logging
-    logPath = os.path.join(dbDir, 'DownLoads.log')
-    ClimateData_log = logging.getLogger(__name__)
-    ClimateData_log.setLevel(logging.INFO)
-    ClimateData_fmtr = logging.Formatter('%(asctime)s %(message)s', "%Y-%m-%d %H:%M")
-
-    fh = logging.FileHandler(logPath, mode='a')
-    fh.setLevel(logging.INFO)
-    fh.setFormatter(ClimateData_fmtr)
-    ClimateData_log.addHandler(fh)
 
     # Command Line Processing
     if not cdo_token:
@@ -407,8 +266,9 @@ if __name__ == '__main__':
                 else:
                     raise ValueError
         else:
-            upd_yrs = int(appCfg['NOAA']['upd_yrs'])
-            dbFiles = update_db(station_dict, dbDir, noaaObj, upd_yrs)
+            upd_yrs = range(date.today().year - int(appCfg['NOAA']['upd_yrs']), date.today().year)
+            upd_yrList = [_yr + 1 for _yr in upd_yrs]
+            cdObj = ClimateDataObj(dbDir, upd_yrList, station_dict, noaaObj)
 
-            gui = guiMain(dbFiles, (800, 100))  # Gui Setup
+            gui = guiMain(cdObj, (800, 100))  # Gui Setup
             gui.mainloop()

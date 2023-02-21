@@ -84,19 +84,20 @@ class guiPlot(FigureCanvasTk):
     """
     canvas_dpi = 100
 
-    def __init__(self, parent, station, years, np_climate_data, figsize):
+    def __init__(self, parent, cdObj, figsize):
         self._daysum = [sum(mm2days[:x]) for x in range(len(mm2days)+1)]  # Can't be Class Variable!
 
         self._parent = parent
-        self._station = station
-        self._yrList = years
-        self._np_climate_data = np_climate_data
-        self._ClimateDataObj = ClimateDataObj(np_climate_data, years, station)
+        self._ClimateDataObj = cdObj
 
-        self._np_alldoy_mean = {}          # Mean Across all Years for each Day, shape = (366,)
-        for _key in ['tmin', 'tmax', 'prcp']:
-            self._np_alldoy_mean[_key] = np.nanmean(np_climate_data[:, :][_key], axis=0)
+        self._station = cdObj.station
+        self._np_climate_data = cdObj.np_data
+        self._yrList = cdObj.yrList
+        self._np_alldoy_mean = cdObj.np_alldoy_mean
 
+        # for _key in ['tmin', 'tmax', 'prcp']:
+        #     self._np_alldoy_mean[_key] = np.nanmean(np_climate_data[:, :][_key], axis=0)
+        #
         self._obs = None             # Observation, np_climate_data field name
         self._type = None             # Type of Plot of PLOT_TYPE
         self._ma_numdays = 15         # Moving Avg Window Size

@@ -13,12 +13,13 @@ import tkinter.ttk as ttk
 from dbCoupler import dbCoupler
 from guiPlot import guiPlot, dayInt2MMDD, dayInt2Label, PLOT_TYPE
 from guiStyle import guiStyle
+from ClimateDataObj import ClimateDataObj
 
 class guiMain(tk.Tk):
     """A tk Application (i.e. Main/Root Window)
 
     """
-    def __init__(self, dbList: list[str], pos_tuple):
+    def __init__(self, cdObj: ClimateDataObj, pos_tuple):
         """ A tk Application (i.e. Main/Root Window) to display Climate Data and its Analysis.
             Weather data is read from a sqlite DB.  A list of DB File Paths is passed to __init__.
 
@@ -34,16 +35,14 @@ class guiMain(tk.Tk):
         super().__init__()
         print('tkinter Version: {}'.format(self.tk.call('info', 'patchlevel')))
 
-        self.dbList = dbList
+        # self.dbList = dbList
         self._posXY = pos_tuple
-        self._stations = [path.splitext(path.basename(x))[0] for x in self.dbList]
-        self._station_index = 0
-        # self._selected_station = self._stations[0]
-        # station_id = get_noaa_id(self._selected_station)
+        self._ClimateDataObj = cdObj
+        self._stations = cdObj.stationList
+        self.np_climate_data = cdObj.np_data
+        self.yrList = cdObj.yrList
 
-        self.dbMgr = dbCoupler()
-        self.dbMgr.open(dbList[0])
-        self.yrList, self.np_climate_data, missing_data = self.dbMgr.rd_climate_data()
+        self._station_index = self._stations.index(self._ClimateDataObj.station)
 
         # Initial Gui Setup
         self.title("Climate Data Analyzer")
@@ -60,7 +59,7 @@ class guiMain(tk.Tk):
         self.columnconfigure(0, weight=1)            # Expand Widgets in Width
 
         # Row-0, Column-0 : Plot Widget
-        self._plot_widget = guiPlot(self, self.selected_station, self.yrList, self.np_climate_data, figsize=(1000, 400))
+        self._plot_widget = guiPlot(self, self._ClimateDataObj, figsize=(1000, 400))
         self._plot_widget.grid(row=0, column=0, rowspan=1, columnspan=8)
 
         # Column-0, Information Widget
@@ -91,6 +90,7 @@ class guiMain(tk.Tk):
         self._ObserMenu.grid(row=1, column=5, sticky='e')
 
         # Column-7, StationMenu
+        # select_index = self._stations.index(self._ClimateDataObj.station)
         self._StationMenu = tkOptionMenu(self, self._stations, self._station_index, self.on_StationMenu)
         self._StationMenu.grid(row=1, column=7, sticky='e')
 
@@ -235,6 +235,8 @@ class guiMain(tk.Tk):
             Calls guiPlot Widget to generate a new plot.
         """
         print('guiMain.on_StationMenu {} {}'.format(xItem, self._ObserMenu.selectedItem))
+        self._ClimateDataObj.station = xItem
+        self._plot_widget.plot(self._TypeButton.enum, self._ObserMenu.selectedItem, self._ArgSelFrame.argtype)
 
     def on_configure(self, event):
         """ Track Position of guiMain AND fix incorrect guiMain width changes made by MPL.
