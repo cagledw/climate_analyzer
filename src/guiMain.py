@@ -263,7 +263,7 @@ class tkArgSelFrame(ttk.Frame):
         self._label_text = tk.StringVar()                # Information Widget
         super().__init__(parent, width=100)
 
-        iconDir = path.join(path.dirname(__file__), 'Icons')
+        iconDir = path.join(path.dirname(__file__), '../extra')
         iconPaths = {_name: _path for _name, _path in
                      zip(['arrow-lf', 'arrow-rt'], [path.join(iconDir, _icon)
                                                     for _icon in ['arrow-lf16x16.gif', 'arrow-rt16x16.gif']])}

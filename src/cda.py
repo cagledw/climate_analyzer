@@ -31,7 +31,7 @@ from guiMain import guiMain
 from guiPlot import dayInt2MMDD, dayInt2Label, date2enum
 from dbCoupler import dbCoupler, DBTYPE_CDO
 
-dbName = 'fips_codes.db'
+dbName = os.path.join('..', 'extra', 'fips_codes.db')
 user_dbPath = 'AppData\\ClimateData'
 
 def QueryStdIO(prompt):
