@@ -4,7 +4,6 @@
 .ini
 .idea
 .swp
-doc
-archive
+dist/
 __pycache__
 *.swp

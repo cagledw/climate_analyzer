@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ClimateDataAnalyzer"
+version = "0.0.4"
+authors = [
+  { name="David Cagle", email="davidc@clearfocusengineering.com" },
+]
+description = "Download & Analyze NOAA Climate Data"
+readme = "README.md"
+requires-python = ">=3.7"
+
+dependencies = [
+    "haversine>=2.7.0",
+    "matplotlib>=3.5.1",
+    "numpy>=1.23.5",
+    "requests>=2.26.0"
+]
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/cagledw/ClimateDataAnalyzer"
+
+[tool.hatch.build]
+sources = ["src"]

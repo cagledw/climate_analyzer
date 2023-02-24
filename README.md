@@ -14,7 +14,7 @@ NOAA has 100's (1000's) of weather stations spread across the country.
 Each is assigned an ID, such as: 'GHCND:USW00024233'
 This app supports searching for station ID based on a geographical region.
 
-Geographical Regions are specified fip_code. See:
+Geographical Regions are specified by fip_code. See:
   https://www.census.gov/library/reference/code-lists/ansi.html
 
 Command line options to assist in station ID determination:
