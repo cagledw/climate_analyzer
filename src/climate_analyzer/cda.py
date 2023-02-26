@@ -19,7 +19,7 @@ import copy
 import logging
 import numpy as np
 from configparser import RawConfigParser
-from ClimateDataObj import ClimateDataObj, PLOT_DATA
+from ClimateDataAnalyzer import ClimateDataObj
 
 from glob import glob
 # from collections import namedtuple
@@ -145,6 +145,8 @@ def save_appCfg(cfgParser: RawConfigParser, iniFilePath: str):
     except IOError:
         print('Error')
 
+def main():
+    print('main')
 
 if __name__ == '__main__':
 
