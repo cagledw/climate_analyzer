@@ -18,13 +18,12 @@ import tkinter as tk
 import tkinter.ttk as ttk
 import matplotlib as mpl
 import matplotlib.transforms as mpl_xforms
-import _mpl_tk
 
 from matplotlib.figure import Figure
 from matplotlib.collections import LineCollection
 from matplotlib.backends.backend_pdf import PdfPages
-from _mpl_tk import FigureCanvasTk
-from ClimateDataObj import ClimateDataObj, PLOT_DATA
+from ._mpl_tk import FigureCanvasTk, __file__
+from .climate_dataobj import ClimateDataObj, PLOT_DATA
 
 pltcolor1 = 'dimgray'
 pltcolor2 = 'skyblue'
@@ -136,7 +135,7 @@ class guiPlot(FigureCanvasTk):
 
         # Special Variables to Manage Position XTick Labels
         self._tick_offset = mpl_xforms.ScaledTranslation(-25/72, 0, self._figure.dpi_scale_trans)
-        print(_mpl_tk.__file__)
+        print(__file__)
 
     # @property
     # def istemp(self):
@@ -192,6 +191,7 @@ class guiPlot(FigureCanvasTk):
             The matplotlib object _verLine is queried to get the x-value of the current cursor
         """
         data_x = 0 if self._vertLine is None else self._vertLine.get_xdata()
+        if type(data_x) == list: data_x = data_x[0]
 
         # Determine Date @ Cursor
         if self._type == PLOT_TYPE.SNGLDOY:  # data_x enumerated year
@@ -200,6 +200,8 @@ class guiPlot(FigureCanvasTk):
             mdy = (self._yrList[yrenum], *dayInt2MMDD(self._dayenum))
 
         elif self._type == PLOT_TYPE.ALLDOY:  # data_x enumerated day
+            # print(type(self._doy_xorigin.dayenum), self._vertLine.get_xdata())
+            
             yrenum = self._doy_xorigin.yrenum
             dayenum = self._doy_xorigin.dayenum + data_x
             if dayenum > 365:

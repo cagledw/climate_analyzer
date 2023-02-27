@@ -14,7 +14,7 @@ from glob import glob
 from datetime import date, datetime
 from collections import namedtuple
 from haversine import haversine, Unit
-from dbCoupler import DBTYPE_CDO
+from .db_coupler import DBTYPE_CDO
 from typing import Dict, List, Tuple
 
 STATION_T = namedtuple('STATION_T',  ['id', 'name', 'lat_long', 'elev', 'mindate', 'maxdate', 'dist2home'])

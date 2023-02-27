@@ -5,5 +5,6 @@
 .idea
 .swp
 dist/
+venv/
 __pycache__
 *.swp

@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "ClimateDataAnalyzer"
-version = "0.0.4"
+name = "climate_analyzer"
+version = "0.0.7"
 authors = [
   { name="David Cagle", email="davidc@clearfocusengineering.com" },
 ]
@@ -30,3 +30,6 @@ classifiers = [
 
 [tool.hatch.build]
 sources = ["src"]
+
+[project.scripts]
+cda = 'ClimateDataAnalyzer.cda:main'

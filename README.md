@@ -1,5 +1,16 @@
 # Climate Data Analysis
 
+This project began as a desire visualize LOCAL climate change.
+In the search for HARD DATA, I was surprised to find very little.  
+Yes, I know all sort of Big Institutions are working on climate
+models.  Are they open source? Are they easy to interact with?
+Does it answer the question how climate change affects me LOCALLY?
+Maybe they exist, but I couldn't find any.
+
+So, with the idea of pulling publically available NOAA climate data
+off the web; I began this project.  It is rough and incomplete,
+but it is a begining.
+
 Command Line Script to:
     1. Download NOAA Climate Daily Summary Data
     2. Store in off-line database(s) organized by NOAA Weather Station
@@ -24,3 +35,18 @@ Command line options to assist in station ID determination:
 
 From Command Line:
     py -m cda [-option] [-arg]
+
+When installed with pip, it should add a 'cda.exe' file to your Python Environment
+in the pythonXX\Scripts directory and a climate_analysis package in your
+pythonXX\Lib\site-packages.  cda.exe utilizes the climate_analysis package.
+Config data is kept in cda.ini, also stored in pythonXX\Scripts.  SOMEPLACE BETTER?
+
+The downloaded climate data is [tmin, tmax, tavg, prcp, show, snwd].  It is
+organized by date, and <station_alias>.  <station_alias> is user defined, 
+corresponds with a NOAA <station_id>, and also matches a sqlite db file name.
+All db files are stored in a single directory, specified in cda.ini.
+
+Collaborators are welcomed.  This could morph into a substantial project or
+it could fizzle out. If interested, contact me: davidc@clearfocusengineering.com.
+We can work out how to collaborate to move ths project forward.
+

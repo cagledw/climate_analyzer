@@ -10,10 +10,10 @@ import numpy as np
 import tkinter as tk
 import tkinter.ttk as ttk
 
-from dbCoupler import dbCoupler
-from guiPlot import guiPlot, dayInt2MMDD, dayInt2Label, PLOT_TYPE
-from guiStyle import guiStyle
-from ClimateDataObj import ClimateDataObj
+from .db_coupler import dbCoupler
+from .gui_plot import guiPlot, dayInt2MMDD, dayInt2Label, PLOT_TYPE
+from .gui_style import guiStyle
+from .climate_dataobj import ClimateDataObj
 
 class guiMain(tk.Tk):
     """A tk Application (i.e. Main/Root Window)

@@ -7,9 +7,9 @@ from enum import IntEnum
 from typing import Dict, List, Tuple, TypedDict
 from collections import namedtuple
 from calendar import month_abbr
-from dbCoupler import dbCoupler, DBTYPE_CDO
 from itertools import groupby, accumulate
-from noaa import NOAA
+from .noaa import NOAA
+from .db_coupler import dbCoupler, DBTYPE_CDO
 
 import logging
 import os
