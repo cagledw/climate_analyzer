@@ -22,7 +22,7 @@ import matplotlib.transforms as mpl_xforms
 from matplotlib.figure import Figure
 from matplotlib.collections import LineCollection
 from matplotlib.backends.backend_pdf import PdfPages
-from ._mpl_tk import FigureCanvasTk, __file__
+from ._mpl_tk import FigureCanvasTk
 from .climate_dataobj import ClimateDataObj, PLOT_DATA
 
 pltcolor1 = 'dimgray'
@@ -135,7 +135,6 @@ class guiPlot(FigureCanvasTk):
 
         # Special Variables to Manage Position XTick Labels
         self._tick_offset = mpl_xforms.ScaledTranslation(-25/72, 0, self._figure.dpi_scale_trans)
-        print(__file__)
 
     # @property
     # def istemp(self):

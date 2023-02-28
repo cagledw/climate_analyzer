@@ -39,7 +39,8 @@ From Command Line:
 When installed with pip, it should add a 'cda.exe' file to your Python Environment
 in the pythonXX\Scripts directory and a climate_analysis package in your
 pythonXX\Lib\site-packages.  cda.exe utilizes the climate_analysis package.
-Config data is kept in cda.ini, also stored in pythonXX\Scripts.  SOMEPLACE BETTER?
+Config data is kept in cda.ini, also stored in pythonXX\Lib\site-packages.
+IS THERE SOMEPLACE BETTER?
 
 The downloaded climate data is [tmin, tmax, tavg, prcp, show, snwd].  It is
 organized by date, and <station_alias>.  <station_alias> is user defined, 

@@ -21,7 +21,6 @@ import numpy as np
 from configparser import RawConfigParser
 
 from glob import glob
-# from collections import namedtuple
 from datetime import date, datetime, timedelta
 from itertools import groupby, accumulate
 
@@ -146,10 +145,6 @@ def save_appCfg(cfgParser: RawConfigParser, iniFilePath: str):
         print('Error')
 
 def main():
-    print('main')
-
-if __name__ == '__main__':
-
     # INI File Specifies critical parameters - cdo_token MUST BE SUPPLIED!
     iniPath = os.path.splitext(__file__)[0] + '.ini'
     appCfg = get_appCfg(os.path.join(iniPath))
@@ -158,7 +153,7 @@ if __name__ == '__main__':
 
     # Command Line Processing
     if not cdo_token:
-        print(f'Error: {iniPath} must supply a cdo_token')
+        print(f'Error:\n {iniPath}\n must supply a cdo_token')
         print('See: https://www.ncdc.noaa.gov/cdo-web/token')
 
     else:
@@ -274,3 +269,7 @@ if __name__ == '__main__':
 
             gui = guiMain(cdObj, (800, 100))  # Gui Setup
             gui.mainloop()
+            
+
+if __name__ == '__main__':
+    main()

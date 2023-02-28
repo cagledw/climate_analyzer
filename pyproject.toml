@@ -26,10 +26,10 @@ classifiers = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/cagledw/ClimateDataAnalyzer"
+"Homepage" = "https://github.com/cagledw/climate_analyzer"
 
 [tool.hatch.build]
 sources = ["src"]
 
 [project.scripts]
-cda = 'ClimateDataAnalyzer.cda:main'
+cda = 'climate_analyzer.cda:main'
