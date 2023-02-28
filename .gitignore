@@ -1,10 +1,9 @@
 *~
 *.pyc
 *.py#
-.bat
-.idea
-.swp
+*.bat
+*.swp
+.idea/
 dist/
 venv/
-__pycache__
-*.swp
+__pycache__/
