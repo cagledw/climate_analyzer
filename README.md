@@ -36,7 +36,7 @@ Command line options to assist in station ID determination:
 From Command Line:
     py -m cda [-option] [-arg]
 
-When installed with pip, it should add a 'cda.exe' file to your Python Environment
+When installed with pip, it will add a 'cda.exe' file to your Python Environment
 in the pythonXX\Scripts directory and a climate_analysis package in your
 pythonXX\Lib\site-packages.  cda.exe utilizes the climate_analysis package.
 Config data is kept in cda.ini, also stored in pythonXX\Lib\site-packages.

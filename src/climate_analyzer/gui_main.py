@@ -72,6 +72,7 @@ class guiMain(tk.Tk):
         self._pdfButton.grid(row=1, column=1, sticky='nse')
 
         # Column-6, TypeButton (cycles between 3 PLOT_TYPE modes)
+        self._ArgSelFrame = None                               # circular reference issue, from tkBoggleButton
         self._TypeButton = tkToggleButton(self, PLOT_TYPE, self.on_TypeButton)
         self._TypeButton.grid(row=1, column=6, sticky='nse')
         self._TypeButton.enum = PLOT_TYPE.ALLDOY
@@ -149,40 +150,42 @@ class guiMain(tk.Tk):
             self._update_info_text()
 
     def on_TypeButton(self, new_type):
-        try:
-            argType = self._ArgSelFrame.argtype # This May Not Exist
+        if self._ArgSelFrame is None:
+            return
 
-            if argType != new_type:
-                if new_type == PLOT_TYPE.ALLDOY:
-                    self._ArgSelFrame.argvalue = self._plot_widget.year
-                    plot_arg = self._plot_widget.yearenum
+        argType = self._ArgSelFrame.argtype # This May Not Exist
 
-                elif new_type == PLOT_TYPE.SNGLDOY:
-                    self._ArgSelFrame.argvalue = self._plot_widget.dayenum
-                    plot_arg = self._plot_widget.dayenum
+        if argType != new_type:
+            if new_type == PLOT_TYPE.ALLDOY:
+                self._ArgSelFrame.argvalue = self._plot_widget.year
+                plot_arg = self._plot_widget.yearenum
 
-                elif new_type == PLOT_TYPE.HISTO:
-                    plot_arg = self._plot_widget.dayenum
+            elif new_type == PLOT_TYPE.SNGLDOY:
+                self._ArgSelFrame.argvalue = self._plot_widget.dayenum
+                plot_arg = self._plot_widget.dayenum
 
-                else:
-                    raise ValueError
-
-                self._ArgSelFrame.argtype = new_type
+            elif new_type == PLOT_TYPE.HISTO:
+                plot_arg = self._plot_widget.dayenum
 
             else:
-                raise ValueError('on_TypeButton argType Error')
+                raise ValueError
 
-            # print('  on_TypeButton {} -> {}'.format(argType.name, new_type.name))
+            self._ArgSelFrame.argtype = new_type
 
-            argVal = self._ArgSelFrame.argvalue # This May Not Exist
-            self._plot_widget.plot(self._TypeButton.enum, self._ObserMenu.selectedItem, plot_arg)
-            self._update_info_text()
+        else:
+            raise ValueError('on_TypeButton argType Error')
 
-        except AttributeError:
-            print('AttributeError {}'.format(new_type.name))
+        # print('  on_TypeButton {} -> {}'.format(argType.name, new_type.name))
 
-        except Exception as e:
-            print(f'  on_TypeButton Exception {e}')
+        argVal = self._ArgSelFrame.argvalue # This May Not Exist
+        self._plot_widget.plot(self._TypeButton.enum, self._ObserMenu.selectedItem, plot_arg)
+        self._update_info_text()
+
+        # except AttributeError:
+        #     print('AttributeError {}'.format(new_type.name))
+        #
+        # except Exception as e:
+        #     print(f'  on_TypeButton Exception {e}')
 
     def on_ArgSel(self, argType, argVal):
         """ Performs validation of new argVal
@@ -227,7 +230,7 @@ class guiMain(tk.Tk):
         elif self._TypeButton.enum == PLOT_TYPE.HISTO:
             plotarg = 0
 
-        print('guiMain.on_xItem {} {}'.format(xItem, self._ObserMenu.selectedItem))
+        # print('guiMain.on_xItem {} {}'.format(xItem, self._ObserMenu.selectedItem))
         self._plot_widget.plot(self._TypeButton.enum, self._ObserMenu.selectedItem, plotarg)
 
     def on_StationMenu(self, xItem):
@@ -460,7 +463,7 @@ class tkOptionMenu(ttk.OptionMenu):
     def on_change(self, val):
         self._selectedItem = val
 
-        print('XItem Change {}'.format(val))
+        # print('XItem Change {}'.format(val))
 
         if self.event_callback:
             self.event_callback(val)

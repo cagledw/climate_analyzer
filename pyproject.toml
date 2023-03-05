@@ -4,7 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "climate_analyzer"
-version = "0.0.7"
+version = "0.0.13"
+# dynamic = [
+#     "version"
+# ]
 authors = [
   { name="David Cagle", email="davidc@clearfocusengineering.com" },
 ]
@@ -28,8 +31,15 @@ classifiers = [
 [project.urls]
 "Homepage" = "https://github.com/cagledw/climate_analyzer"
 
+[project.scripts]
+cda = 'climate_analyzer.cda:main'
+
 [tool.hatch.build]
 sources = ["src"]
 
-[project.scripts]
-cda = 'climate_analyzer.cda:main'
+# [tool.hatch.version]
+# path = "climate_analyzer/__about__.py"
+
+[tool.hatch.envs.venv]
+type = "virtual"
+path="./venv"

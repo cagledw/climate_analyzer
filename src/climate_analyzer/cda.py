@@ -30,7 +30,7 @@ from climate_analyzer.gui_plot import dayInt2MMDD, dayInt2Label, date2enum
 from climate_analyzer.db_coupler import dbCoupler, DBTYPE_CDO
 from climate_analyzer.climate_dataobj import ClimateDataObj 
 
-dbName = os.path.join('..', 'extra', 'fips_codes.db')
+dbName = os.path.join('extra', 'fips_codes.db')
 user_dbPath = 'AppData\\ClimateData'
 
 def QueryStdIO(prompt):
@@ -124,6 +124,7 @@ def get_appCfg(iniFilePath: str) -> RawConfigParser:
         config['NOAA']['upd_yrs'] = '2'
 
         config['Stations'] = {}
+        config['Stations']['seatac'] = 'GHCND:USW00024233'
         with open(iniFilePath, 'w') as fp:
             fp.write(';  Climate Data Analysis Configuration\n')
             fp.write(';  Obtain cdo_token from https://www.ncdc.noaa.gov/cdo-web/token\n')
@@ -153,18 +154,14 @@ def main():
 
     # Command Line Processing
     if not cdo_token:
-        print(f'Error:\n {iniPath}\n must supply a cdo_token')
+        print(f'\033[91mError:\033[37m\n {iniPath}\n must supply a cdo_token')
         print('See: https://www.ncdc.noaa.gov/cdo-web/token')
 
     else:
         import argparse
         parser = argparse.ArgumentParser(description='  \033[32mDownload and Analyze NOAA Climate Data\n'
                                                      '  Station Alias and ID must configured in cda.ini\n'
-                                                     '\n'
-                                                     '  -find    download station info from NOAA in region <FIPSRGN>\n'
-                                                     '  -home    set/show <LAT,LONG> used by find\n'
-                                                     '  -findrgn set/show region <FIPSRGN> used by find\n'
-                                                     '  -station show configured stations from ini-file\033[37m',
+                                                     '\033[37m\n',
                                          formatter_class=argparse.RawTextHelpFormatter)
         group = parser.add_mutually_exclusive_group()
 
@@ -196,7 +193,7 @@ def main():
         elif args.findrgn:
             if not args.arg1:
                 rgnInfo = find_region_bycode(noaaObj.findrgn)
-                print(f'code {noaaObj.findrgn} = {rgnInfo.state}, {rgnInfo.region} {rgnInfo.qualifier}')
+                print(f'findrgn {noaaObj.findrgn} = {rgnInfo.state}, {rgnInfo.region} {rgnInfo.qualifier}')
             else:
                 item = None
                 fipItems = find_fipcode(*args.arg1.split(','))
@@ -210,7 +207,7 @@ def main():
                     except IndexError:
                         print('  Invalid, Requires Integer 0:{}'.format(len(fipItems)))
                         continue
-                    appCfg['NOAA']['code'] = f'{item.code:05d}'
+                    appCfg['NOAA']['findrgn'] = f'{item.code:05d}'
                     save_appCfg(appCfg, iniPath)
                     print(f'  {item.state}, {item.region} {item.qualifier} = {appCfg["NOAA"]["code"]}')
 
