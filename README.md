@@ -12,9 +12,9 @@ off the web; I began this project.  It is rough and incomplete,
 but it is a begining.
 
 Command Line Script to:
-    1. Download NOAA Climate Daily Summary Data
-    2. Store in off-line database(s) organized by NOAA Weather Station
-    3. Visualize with tkinter + matplotlib GUI
+    1. Download NOAA Climate Daily Summary Data  
+    2. Store in off-line database(s) organized by NOAA Weather Station  
+    3. Visualize with tkinter + matplotlib GUI  
 
 NOAA requires a token to utilize their automated download fascility.
 This token must be supplied to this app via an ini-file: cda.ini.  See:
@@ -29,12 +29,12 @@ Geographical Regions are specified by fip_code. See:
   https://www.census.gov/library/reference/code-lists/ansi.html
 
 Command line options to assist in station ID determination:
-    -findrgn [2_letter_state]    : set fip_code used by find 
-    -find    [radius]            : list all stations within region set by findrgn
-    -home    [lat/long]          : set location that station distance is measured from
+    -findrgn [2_letter_state]    : set fip_code used by find   
+    -find    [radius]            : list all stations within region set by findrgni  
+    -home    [lat/long]          : set location that station distance is measured from  
 
-From Command Line:
-    py -m cda [-option] [-arg]
+From Command Line:  
+    py -m cda [-option] [-arg]  
 
 When installed with pip, it will add a 'cda.exe' file to your Python Environment
 in the pythonXX\Scripts directory and a climate_analysis package in your

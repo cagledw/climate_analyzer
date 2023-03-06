@@ -94,10 +94,7 @@ class guiPlot(FigureCanvasTk):
         self._yrList = cdObj.yrList
         self._np_alldoy_mean = cdObj.np_alldoy_mean
 
-        # for _key in ['tmin', 'tmax', 'prcp']:
-        #     self._np_alldoy_mean[_key] = np.nanmean(np_climate_data[:, :][_key], axis=0)
-        #
-        self._obs = None             # Observation, np_climate_data field name
+        self._obs = None              # Observation, np_climate_data field name
         self._type = None             # Type of Plot of PLOT_TYPE
         self._ma_numdays = 15         # Moving Avg Window Size
 
@@ -122,6 +119,7 @@ class guiPlot(FigureCanvasTk):
         self._ax0 = None
         self._ax0twin = None
         self._vertLine = None
+        self._markerX = None
 
         mpl.rc('lines',  markersize = 2)
         mpl.rc('ytick',  labelsize  = 8)
@@ -135,12 +133,6 @@ class guiPlot(FigureCanvasTk):
 
         # Special Variables to Manage Position XTick Labels
         self._tick_offset = mpl_xforms.ScaledTranslation(-25/72, 0, self._figure.dpi_scale_trans)
-
-    # @property
-    # def istemp(self):
-    #     """ Enumerated_Day (0..365) of current plot, includes Feb 29
-    #     """
-    #     return self._obs in ['tmax', 'tmin']
 
     @property
     def dayenum(self):
@@ -289,20 +281,7 @@ class guiPlot(FigureCanvasTk):
     def set_marker(self, data_x, data_y=None):
         """ data_x = yrenum
         """
-        print('guiPlot.set_marker {} {}'.format(data_x, self._yrList[data_x]))
-        # print(len(self._np_climate_data[data_x, :][self._obs]))
-        # print(len(self._np_climate_data[:, data_x][self._obs]))
-
-        for _yr in range(self._ClimateDataObj.num_years):
-            daymin = self._dayenum - 2
-            daymax = self._dayenum + 3
-
-            if daymin < 0: daymin = 0
-            if daymax > 365: xmax = 365
-            # ma_vals = self._np_climate_data[_yr, daymin : daymax][self._obs]
-            # pts = ', '.join([f'{x:.2f}' for x in ma_vals])
-
-            # print(self._yrList[_yr], ',', pts, ',{:.3f}'.format(np.mean(ma_vals)))
+        self._markerX = data_x
 
     def set_cursor(self, data_x, data_y=None):
         if self._vertLine is None:

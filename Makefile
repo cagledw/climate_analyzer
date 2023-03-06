@@ -32,6 +32,7 @@ clean:
 	rm -r -f dist
 	rm -r -f venv
 	rm -f $(SRC)/*.ini
+	rm -r -f climate-analyzer
 
 noinst:
 	rm -r -f $(VPKG) 

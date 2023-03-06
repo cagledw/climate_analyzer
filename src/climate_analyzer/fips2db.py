@@ -1,15 +1,7 @@
 """
-Climate Data Analysis.
-  Download Data from NOAA Climate Data WebSite and/or Launch tkinter GUI
-  Only Climate Data for locations this Apps's Configuration (*.ini) File can be downloaded
-
-  Three options for Climate Data Download:
-    -find_ids : Display Stations and their ID within certain distance of 'Home'
-    -show_ids : Display Stations whose ID is known
-    -getcd    : download Historical Climate Data for specific Station to sqlite DB
-
-  Otherwise, launches GUI for analysis of data previously stored in sqlite DB.
-
+Utility to generate a fips_codes.db - a sqlite3 database
+  From: https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt
+  Weather Station ID Lookup needs a fip_code to filter search by.
 
 """
 
@@ -141,5 +133,4 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     fips2db(args.fsrc[0], args.fdst[0])
-    # args = parser.parse_args()
 

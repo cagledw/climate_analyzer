@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "climate_analyzer"
-version = "0.0.13"
+version = "0.0.14"
 # dynamic = [
 #     "version"
 # ]
@@ -37,8 +37,8 @@ cda = 'climate_analyzer.cda:main'
 [tool.hatch.build]
 sources = ["src"]
 
-# [tool.hatch.version]
-# path = "climate_analyzer/__about__.py"
+[tool.hatch.version]
+path = "src/climate_analyzer/__init__.py"
 
 [tool.hatch.envs.venv]
 type = "virtual"
