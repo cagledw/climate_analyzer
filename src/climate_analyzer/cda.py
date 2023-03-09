@@ -34,18 +34,21 @@ from climate_analyzer.climate_dataobj import ClimateDataObj
 dbName = os.path.join('extra', 'fips_codes.db')
 user_dbPath = 'AppData\\ClimateData'
 
-def QueryStdIO(prompt):
+def QueryStdIO(prompt, intype=str):
     inp = None
     while inp is None:
         inp = input(prompt + "->")
         if not inp:
             return None
 
-        try:
-            choiceInt = int(inp)
-            return choiceInt
-        except:
-            pass
+        if intype == int:
+            try:
+                choiceVal = int(inp)
+            except:
+                pass
+        else:
+            choiceVal = inp
+    return choiceVal
 
 def print_stations(station_list):
     """ print station_list to std_out
@@ -119,7 +122,8 @@ def get_appCfg(iniFilePath: str) -> RawConfigParser:
         config['NOAA'] = {}
         config['NOAA']['cdo_token'] = ''
         config['NOAA']['findrgn'] = '53033'
-        config['NOAA']['home'] = str((47.60923, -122.16787))
+        config['NOAA']['home'] = None
+        # config['NOAA']['home'] = str((47.60923, -122.16787))
         config['NOAA']['date_1st'] = '2000-01-01'
         config['NOAA']['date_last'] = 'now'
         config['NOAA']['upd_yrs'] = '2'
@@ -146,6 +150,110 @@ def save_appCfg(cfgParser: RawConfigParser, iniFilePath: str):
     except IOError:
         print('Error')
 
+def opt_findrgn(findrgn, appCfg, noaaObj):
+    appCfg_update = False
+
+    if not findrgn:
+        rgnInfo = find_region_bycode(noaaObj.findrgn)
+        # print(f'findrgn {noaaObj.findrgn} = {rgnInfo.state}, {rgnInfo.region} {rgnInfo.qualifier}')
+
+    else:
+        rgnInfo = None
+        fipItems = find_fipcode(*findrgn.split(','))
+
+        while rgnInfo is None:
+            for _cnt, _metaData in enumerate(fipItems):
+                print(f'  [{_cnt:>2d}]  {_metaData.region} {_metaData.qualifier}')
+            index = QueryStdIO('Select Region', int)
+            try:
+                rgnInfo = fipItems[index]
+
+            except IndexError:
+                print('  Invalid, Requires Integer 0:{}'.format(len(fipItems)))
+                continue
+            appCfg['NOAA']['findrgn'] = f'{rgnInfo.code:05d}'
+            appCfg_update = True
+            # rgnInfo = item
+            # save_appCfg(appCfg, iniPath)
+            # print(f'  {item.state}, {item.region} {item.qualifier} = {appCfg["NOAA"]["findrgn"]}')
+
+    print(f'findrgn {noaaObj.findrgn} = {rgnInfo.state}, {rgnInfo.region} {rgnInfo.qualifier}')
+
+    return appCfg_update
+
+def opt_home(home, appCfg, noaaObj):
+    appCfg_update = False
+
+    if not home:
+        print(f'home {noaaObj.home}')
+    else:
+        lat_long = home.strip('()').split(',')
+        print(lat_long)
+        try:
+            new_home = [float(x) for x in lat_long]
+            new_cfg = '(' + ','.join(['{:.5f}'.format(x) for x in new_home]) + ')'
+            appCfg['NOAA']['home'] = new_cfg
+            appCfg_update = True
+            # save_appCfg(appCfg, iniPath)
+
+        except Exception as err:
+            print(err)
+
+    return appCfg_update
+
+def opt_station(station, appCfg, noaaObj):
+    """ --station processing
+
+        returns True if appCfg needs to be saved otherwise False
+    """
+    appCfg_update = False
+
+    if not station:
+        print('{:^20}{:^20}{:^18}{:^14}{:^10}'.format(
+            'alias', 'station_id', 'lat_long', 'dist2home', 'elev'))
+
+        for _alias, _sid in appCfg['Stations'].items():
+            cfgInfo = f'{_alias:20}: {_sid}'
+
+            err, metaData = noaaObj.station_info(_sid)
+            if err:
+                infoStr = str(err)
+            else:
+                infoStr = (','.join([f'{x:3.3f}' for x in metaData.lat_long])
+                           + f'  {metaData.dist2home:> 6.1f} mi'
+                           + f'  {metaData.elev:> 7.1f} ft')
+            print(cfgInfo, f'  {infoStr}')
+        print(f'home @ {appCfg["NOAA"]["home"]}')
+
+    else:
+        station_pairs = appCfg.items('Stations')
+        station_list = [_pair[0].lower() for _pair in station_pairs]
+        try:
+            s_index = station_list.index(station.lower())
+            station_id = station_pairs[s_index][1]
+            station_alias = station_pairs[s_index[0]]
+
+        except ValueError:
+            station_id = QueryStdIO(f'Enter stationID for {station}')
+            station_alias = station.lower()
+            appCfg['Stations'][station_alias] = station_id
+            appCfg_update = True
+
+        errStatus, station_info = noaaObj.station_info(station_id)
+        if not errStatus:
+            info = {**{'alias': station_alias}, **station_info._asdict()}
+            for _k, _v in info.items():
+                if type(_v) == datetime:
+                    valstr = _v.strftime('%m/%d/%Y')
+                elif type(_v) == float:
+                    valstr = f'{_v:4.1f}'
+                else:
+                    valstr = str(_v)
+                print(f'  {_k:<10}: {valstr}')
+
+    return appCfg_update
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description='  \033[32mDownload and Analyze NOAA Climate Data\n'
@@ -154,18 +262,18 @@ def main():
                                      formatter_class=argparse.RawTextHelpFormatter)
     group = parser.add_mutually_exclusive_group()
 
-    group.add_argument('-find', action='store_true', default=False,
-                       help='[radius]  - Download NOAA Weather Stations Info within [radius] of <HOME>')
-    group.add_argument('-findrgn', action='store_true', default=False,
-                       help='[state]   - Display or Set FIPS Region <FIPSRGN> used by find')
-    group.add_argument('-home',  action='store_true', default=False,
-                       help='[lat,long]- Display or Set <HOME> lat,long used by find')
-    group.add_argument('-getcd', action='store_true', default=False,
-                       help='[alias]   - Download all available Climate Data for station [alias]')
-    group.add_argument('-station', action='store_true', default=False,
+    group.add_argument('-station', '--station', action='store_true', default=False,
                        help='          - Display info on configured stations from ini-file')
-    group.add_argument('-version', action='store_true', default=False,
+    group.add_argument('-version', '--version', action='store_true', default=False,
                        help='          - Display version')
+    group.add_argument('-find', '--find', action='store_true', default=False,
+                       help='[radius]  - Download NOAA Weather Stations Info within [radius] of <HOME>')
+    group.add_argument('-home', '--home',  action='store_true', default=False,
+                       help='[lat,long]- Display or Set <HOME> lat,long used by find')
+    group.add_argument('-findrgn', '--findrgn', action='store_true', default=False,
+                       help='[state]   - Display or Set FIPS Region <FIPSRGN> used by find')
+    group.add_argument('-getcd', '--getcd', action='store_true', default=False,
+                       help='[alias]   - Download all available Climate Data for station [alias]')
     parser.add_argument('arg1', action='store', nargs='?', default=None)
     args = parser.parse_args()
 
@@ -195,61 +303,24 @@ def main():
                 print(f'home @ {appCfg["NOAA"]["home"]}')
 
         elif args.findrgn:
-            if not args.arg1:
-                rgnInfo = find_region_bycode(noaaObj.findrgn)
-                print(f'findrgn {noaaObj.findrgn} = {rgnInfo.state}, {rgnInfo.region} {rgnInfo.qualifier}')
-            else:
-                item = None
-                fipItems = find_fipcode(*args.arg1.split(','))
-                while item is None:
-                    for _cnt, _metaData in enumerate(fipItems):
-                        print(f'  [{_cnt:>2d}]  {_metaData.region} {_metaData.qualifier}')
-                    index = QueryStdIO('Select Region')
-                    try:
-                        item = fipItems[index]
-
-                    except IndexError:
-                        print('  Invalid, Requires Integer 0:{}'.format(len(fipItems)))
-                        continue
-                    appCfg['NOAA']['findrgn'] = f'{item.code:05d}'
-                    save_appCfg(appCfg, iniPath)
-                    print(f'  {item.state}, {item.region} {item.qualifier} = {appCfg["NOAA"]["findrgn"]}')
+            update_cfg = opt_findrgn(args.arg1, appCfg, noaaObj)
+            if update_cfg:
+                save_appCfg(appCfg, iniPath)
 
         elif args.home:
-            if not args.arg1:
-                print(f'home {noaaObj.home}')
-            else:
-                lat_long = args.arg1.strip('()').split(',')
-                print(lat_long)
-                try:
-                    new_home = [float(x) for x in lat_long]
-                    new_cfg = '(' + ','.join(['{:.5f}'.format(x) for x in new_home]) + ')'
-                    appCfg['NOAA']['home'] = new_cfg
-                    save_appCfg(appCfg, iniPath)
-
-                except Exception as err:
-                    print(err)
+            update_cfg = opt_home(args.arg1, appCfg, noaaObj)
+            if update_cfg:
+                save_appCfg(appCfg, iniPath)
 
         elif args.station:
-            print('{:^20}{:^20}{:^18}{:^14}{:^10}'.format(
-                'alias', 'station_id', 'lat_long', 'dist2home', 'elev'))
-
-            for _alias, _sid in appCfg['Stations'].items():
-                cfgInfo = f'{_alias:20}: {_sid}'
-
-                err, metaData = noaaObj.station_info(_sid)
-                if err:
-                    infoStr = str(err)
-                else:
-                    infoStr = (','.join([f'{x:3.3f}' for x in metaData.lat_long])
-                               + f'  {metaData.dist2home:> 6.1f} mi'
-                               + f'  {metaData.elev:> 7.1f} ft')
-                print(cfgInfo, f'  {infoStr}')
-            print(f'home @ {appCfg["NOAA"]["home"]}')
+            update_cfg = opt_station(args.arg1, appCfg, noaaObj)
+            if update_cfg:
+                save_appCfg(appCfg, iniPath)
 
         elif args.getcd:
             if args.arg1 is None:
-                station_info = '\n'.join(['    ' + x for x in noaa_aliases()])
+                station_info = '\n'.join(['    ' + x for x in station_dict.keys()])
+                parser.error('[arg1] must supply station name:\n' + station_info)
             else:
                 try:
                     station_id = appCfg['Stations'][args.arg1]

@@ -18,6 +18,7 @@ pip install -r requirements.txt
 endef
 
 PKG  = climate_analyzer
+HPKG = $(subst _,-,$(PKG))
 SRC  = ./src/$(PKG)
 VPKG = venv\Lib\site-packages\climate_analyzer 
 
@@ -32,16 +33,15 @@ clean:
 	rm -r -f dist
 	rm -r -f venv
 	rm -f $(SRC)/*.ini
-	rm -r -f climate-analyzer
+	rm -r -f $(HPKG)
 
 noinst:
 	rm -r -f $(VPKG) 
 
 # Create Virtual Environment
 venv:
-	@$(file >$@.bat$^,$(venvbat))
-	@$@.bat
-	@rm $@.bat
+	hatch env create venv
+	rm -r -f $(HPKG)
 	
 # Create Package Distribution
 dist:
@@ -69,4 +69,7 @@ help:
 	@echo dist    - Create Distrubution Folder dist
 	@echo instpkg - Install $(PKG) into Virtual Env
 	@echo sdist = $(GZFILE)
-
+	@echo $(HPKG)
+	# @$(file >$@.bat$^,$(venvbat))
+	# @$@.bat
+	# @rm -f $@.bat

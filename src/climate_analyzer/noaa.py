@@ -38,12 +38,17 @@ class NOAA():
         self._date_last = date.today() if cfgDict['date_last'] == 'now' \
             else date.fromisoformat(cfgDict['date_last'])
 
-        homeCoords = cfgDict['home'].strip('()').split(',')
-        self.home_coords = [float(x) for x in homeCoords]
+        if cfgDict['home'] is None:
+            self.home_coords = None
+        else:
+            homeCoords = cfgDict['home'].strip('()').split(',') if cfgDict['home'] is not None else None
+            self.home_coords = [float(x) for x in homeCoords]
 
     @property
     def home(self):
-        return '(' + ','.join(['{}'.format(x) for x in self.home_coords]) + ')'
+        _home = 'None' if self.home_coords is None \
+            else '(' + ','.join(['{}'.format(x) for x in self.home_coords]) + ')'
+        return _home
 
     @property
     def findrgn(self):
@@ -61,34 +66,42 @@ class NOAA():
             errStatus = err.args[0]
             res = None
 
-        if errStatus is None and res is not None and res.status_code != 200:
+        if errStatus is None and res.status_code != 200:
             errStatus = requests.exceptions.ConnectionError(f'status:{res.status_code}')
 
-        if errStatus is None:
-            data = res.json()
-            mindate = datetime.strptime(data['mindate'], "%Y-%m-%d")
-            maxdate = datetime.strptime(data['maxdate'], "%Y-%m-%d")
-            lat_long = (data['latitude'], data['longitude'])
-            miles2home = haversine(lat_long, self.home_coords, unit=Unit.MILES)
-            sta_elevation = data['elevation']
-            if data['elevationUnit'] == 'METERS':
-                sta_elevation *= 3.28084
+        else:
+            try:
+                data = res.json()
+                mindate = datetime.strptime(data['mindate'], "%Y-%m-%d")
+                maxdate = datetime.strptime(data['maxdate'], "%Y-%m-%d")
+                lat_long = (data['latitude'], data['longitude'])
+                sta_elevation = data['elevation']
+                if data['elevationUnit'] == 'METERS':
+                    sta_elevation *= 3.28084
 
-            station = (STATION_T(id=station_id,
-                                 name=data['name'],
-                                 lat_long=lat_long,
-                                 elev=sta_elevation,
-                                 mindate=mindate,
-                                 maxdate=maxdate,
-                                 dist2home=miles2home))
+                if self.home_coords:
+                    miles2home = haversine(lat_long, self.home_coords, unit=Unit.MILES)
+                else:
+                    miles2home = 0.0
+
+                station = (STATION_T(id=station_id,
+                                     name=data['name'],
+                                     lat_long=lat_long,
+                                     elev=sta_elevation,
+                                     mindate=mindate,
+                                     maxdate=maxdate,
+                                     dist2home=miles2home))
+            except Exception as ex:
+                errStatus = -1
+
         return errStatus, station
 
     def get_stations(self, dist2home: float):
         """  Returns list of STATION_T within dist2home miles of home_lat_long.
              Only stations within the geographic area defined by findrgn are returned.
         """
-        home_coords = self.home.strip('()')
-        home_lat_long = [float(x) for x in home_coords.split(',')]
+        # home_coords = self.home.strip('()')
+        # home_lat_long = [float(x) for x in home_coords.split(',')]
 
         results = []
         header = {'token': self._cdo_token}
@@ -133,7 +146,11 @@ class NOAA():
                     except KeyError:
                         sta_elevation = float('nan')
 
-                    miles2home = haversine(sta_lat_long, home_lat_long, unit=Unit.MILES)
+                    miles2home = 0 if self.home_coords is None else \
+                        haversine(sta_lat_long, self.home_coords, unit=Unit.MILES)
+
+                    # if self.home_coords is not None:
+                    #     miles2home = haversine(sta_lat_long, self.home_coords, unit=Unit.MILES)
 
                     if miles2home < dist2home:
                         results.append(STATION_T(id=_station['id'],

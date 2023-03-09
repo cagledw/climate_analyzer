@@ -1,20 +1,18 @@
-# Climate Data Analysis
+# climate_analyzer
 
 This project began as a desire visualize LOCAL climate change.
-In the search for HARD DATA, I was surprised to find very little.  
-Yes, I know all sort of Big Institutions are working on climate
-models.  Are they open source? Are they easy to interact with?
+In the search for HARD DATA, I was surprised to find very little.
+Yes, there are Big Institutions that are working on climate models.
+Are they open source? Are they easy to interact with?
 Does it answer the question how climate change affects me LOCALLY?
-Maybe they exist, but I couldn't find any.
+Maybe they exist, but I couldn't find any.  The idea of this app is 
+to pull publically available NOAA climate data off the web and link
+it to a visualization gui.
 
-So, with the idea of pulling publically available NOAA climate data
-off the web; I began this project.  It is rough and incomplete,
-but it is a begining.
-
-Command Line Script to:
-    1. Download NOAA Climate Daily Summary Data  
-    2. Store in off-line database(s) organized by NOAA Weather Station  
-    3. Visualize with tkinter + matplotlib GUI  
+Command Line Script to:  
+1. Download NOAA Climate Daily Summary Data  
+2. Store in off-line database(s) organized by NOAA Weather Station  
+3. Visualize with tkinter + matplotlib GUI  
 
 NOAA requires a token to utilize their automated download fascility.
 This token must be supplied to this app via an ini-file: cda.ini.  See:
@@ -28,10 +26,10 @@ This app supports searching for station ID based on a geographical region.
 Geographical Regions are specified by fip_code. See:
   https://www.census.gov/library/reference/code-lists/ansi.html
 
-Command line options to assist in station ID determination:
-    -findrgn [2_letter_state]    : set fip_code used by find   
-    -find    [radius]            : list all stations within region set by findrgni  
-    -home    [lat/long]          : set location that station distance is measured from  
+Command line options to assist in station ID determination:  
+* findrgn [2_letter_state]    : set fip_code used by find
+* find    [radius]            : list all stations within region set by findrgn
+* home    [lat/long]          : set location that station distance is measured from
 
 From Command Line:  
     py -m cda [-option] [-arg]  

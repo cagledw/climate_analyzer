@@ -128,7 +128,7 @@ class guiMain(tk.Tk):
 
     def on_pdfButton(self):
         print('pdf', self._pdfButton.state())
-        self._plot_widget.write_pdf(f'{self._selected_station}.pdf')
+        self._plot_widget.write_pdf(f'{self.selected_station}.pdf')
 
     def on_motion(self, event):
         """ Motion Events for ALL Widgets, 'event' provides cursor position in 'Display' Space
