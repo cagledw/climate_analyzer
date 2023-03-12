@@ -1,51 +1,58 @@
 # climate_analyzer
 
-This project began as a desire visualize LOCAL climate change.
-In the search for HARD DATA, I was surprised to find very little.
-Yes, there are Big Institutions that are working on climate models.
-Are they open source? Are they easy to interact with?
-Does it answer the question how climate change affects me LOCALLY?
-Maybe they exist, but I couldn't find any.  The idea of this app is 
-to pull publically available NOAA climate data off the web and link
-it to a visualization gui.
+climate_analyzer is a command line app that downloads NOAA weather station 
+daily summary data and provides a gui to analyze year-to-year trends.
+It also provides for searching a particular region for available NOAA
+weather stations. climate_analyzer uses NOAA's Web Services API described
+here: ([https://www.ncdc.noaa.gov/cdo-web/webservices]).
 
-Command Line Script to:  
-1. Download NOAA Climate Daily Summary Data  
-2. Store in off-line database(s) organized by NOAA Weather Station  
-3. Visualize with tkinter + matplotlib GUI  
+## Features
+1. Search for available NOAA weather stations by state/county.
+2. Download NOAA Climate Daily Summary Data by weather station. 
+3. Store data in off-line database(s) organized by weather station.
+4. Visualize with tkinter + matplotlib GUI  
+5. Checks NOAA Web Services for updates to existing off-line database(s).
 
-NOAA requires a token to utilize their automated download fascility.
-This token must be supplied to this app via an ini-file: cda.ini.  See:
-  https://www.ncdc.noaa.gov/cdo-web/token
+## Usage
+climate_analyzer is a command line app that takes one and only one option.
+If no option is provided, climate_analyzer checks for updates to existing
+databases and then launches the visualization gui.  In order to access NOAA's
+Web Services, an access token must be obtained and provided to climate_analyzer.
 
-In order to download a station's climate data, the station ID must be specified.
-NOAA has 100's (1000's) of weather stations spread across the country.
-Each is assigned an ID, such as: 'GHCND:USW00024233'
-This app supports searching for station ID based on a geographical region.
-
-Geographical Regions are specified by fip_code. See:
-  https://www.census.gov/library/reference/code-lists/ansi.html
-
-Command line options to assist in station ID determination:  
-* findrgn [2_letter_state]    : set fip_code used by find
-* find    [radius]            : list all stations within region set by findrgn
-* home    [lat/long]          : set location that station distance is measured from
-
-From Command Line:  
-    py -m cda [-option] [-arg]  
-
-When installed with pip, it will add a 'cda.exe' file to your Python Environment
-in the pythonXX\Scripts directory and a climate_analysis package in your
+When installed with pip, climate_analyzer will add 'cda.exe' to the Python
+Environment in the pythonXX\Scripts directory and a climate_analysis package to
 pythonXX\Lib\site-packages.  cda.exe utilizes the climate_analysis package.
 Config data is kept in cda.ini, also stored in pythonXX\Lib\site-packages.
-IS THERE SOMEPLACE BETTER?
+### Options
 
-The downloaded climate data is [tmin, tmax, tavg, prcp, show, snwd].  It is
-organized by date, and <station_alias>.  <station_alias> is user defined, 
-corresponds with a NOAA <station_id>, and also matches a sqlite db file name.
-All db files are stored in a single directory, specified in cda.ini.
+#### --token [access-token]
+Set the <access-token> used by climate_analyzer when connecting to NOAA's
+Web Services.  The <access-token> is a 32-character alpha-numeric and can be
+obtained from here here: https://www.ncdc.noaa.gov/cdo-web/token
+This, and other configuration parameters are stored in
+..\site-packages\climate_analyzer\cda.ini.
 
-Collaborators are welcomed.  This could morph into a substantial project or
-it could fizzle out. If interested, contact me: davidc@clearfocusengineering.com.
-We can work out how to collaborate to move ths project forward.
+#### --findrgn [state]
+Set the state & county region used by --find.  For each state, climate_analyzer
+prompts with a list of possible counties (or parishes).  The state/county is
+converted 5-digit fip_code and stored in cda.ini. See:
+https://www.census.gov/library/reference/code-lists/ansi.html
+
+#### --find [radius]
+Display <STATION_ID> and other information for all weather stations within
+the state & county set by -findrgn. 
+
+#### --home [lat,long]
+Set internal variable <HOME> used to calculate distance of weather station.
+
+#### --station [alias]
+Set <STATION_ALIAS> and <STATION_ID> used by --getcd.  The user is prompted
+for the <STATION_ID>.  Any number of alias & id pairs may be set but a 
+[alias, id] pair must be set inorder to download its climate data.
+
+#### --getcd [alias]
+Download all available daily summary climate data for [alias].  Daily summary
+consists of [tmin, tmax, tavg, prcp, snow, snwd].  Data is stored in sqlite 
+database @ %USERPROFILE%/AppData/ClimateData with a filename of [alias].  The
+location used to store sqlite databases can be changed by editing cda.ini.
 

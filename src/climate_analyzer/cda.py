@@ -262,18 +262,20 @@ def main():
                                      formatter_class=argparse.RawTextHelpFormatter)
     group = parser.add_mutually_exclusive_group()
 
-    group.add_argument('-station', '--station', action='store_true', default=False,
-                       help='          - Display info on configured stations from ini-file')
     group.add_argument('-version', '--version', action='store_true', default=False,
                        help='          - Display version')
+    group.add_argument('-token', '--token', action='store_true', default=False,
+                       help='[token]   - Set access token to access NOAA Web Services')
     group.add_argument('-find', '--find', action='store_true', default=False,
-                       help='[radius]  - Download NOAA Weather Stations Info within [radius] of <HOME>')
-    group.add_argument('-home', '--home',  action='store_true', default=False,
-                       help='[lat,long]- Display or Set <HOME> lat,long used by find')
+                       help='[radius]  - Display NOAA Weather Stations in <findrgn>')
     group.add_argument('-findrgn', '--findrgn', action='store_true', default=False,
-                       help='[state]   - Display or Set FIPS Region <FIPSRGN> used by find')
+                       help='[state]   - Set State/County Region used by find')
+    group.add_argument('-station', '--station', action='store_true', default=False,
+                       help='          - Register new NOAA Weather Station wth [alias]')
     group.add_argument('-getcd', '--getcd', action='store_true', default=False,
                        help='[alias]   - Download all available Climate Data for station [alias]')
+    group.add_argument('-home', '--home',  action='store_true', default=False,
+                       help='[lat,long]- Display or Set <HOME> lat,long used by find')
     parser.add_argument('arg1', action='store', nargs='?', default=None)
     args = parser.parse_args()
 
@@ -284,8 +286,16 @@ def main():
         iniPath = os.path.splitext(__file__)[0] + '.ini'
         appCfg = get_appCfg(os.path.join(iniPath))
         dbDir = os.path.expandvars(appCfg['Paths']['dbDir'])
-        cdo_token = appCfg['NOAA']['cdo_token']
 
+        if args.token:
+            if args.arg1:
+                appCfg['NOAA']['cdo_token'] = args.arg1
+                save_appCfg(appCfg, iniPath)
+            else:
+                print(f"  cdo_token = {appCfg['NOAA']['cdo_token']}")
+            return
+
+        cdo_token = appCfg['NOAA']['cdo_token']
         if not cdo_token:                    # this must be available to access NOAA
             print(f'\033[91mError:\033[37m\n {iniPath}\n must supply a cdo_token')
             print('See: https://www.ncdc.noaa.gov/cdo-web/token')
@@ -293,6 +303,7 @@ def main():
 
         noaaObj = NOAA(dict(appCfg['NOAA']))     # NOAA Obj provided with dict from ini file
         station_dict = dict(appCfg['Stations'])  # ini file provides dict of alias:station_id
+
         if args.find:
             dist2home = float(args.arg1) if args.arg1 is not None else 30.0
             err, station_list = noaaObj.get_stations(dist2home)
