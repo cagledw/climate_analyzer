@@ -19,7 +19,7 @@ class guiMain(tk.Tk):
     """A tk Application (i.e. Main/Root Window)
 
     """
-    def __init__(self, cdObj: ClimateDataObj, pos_tuple):
+    def __init__(self, cdObj: ClimateDataObj, pos_tuple, app_ver):
         """ A tk Application (i.e. Main/Root Window) to display Climate Data and its Analysis.
             Weather data is read from a sqlite DB.  A list of DB File Paths is passed to __init__.
 
@@ -27,7 +27,7 @@ class guiMain(tk.Tk):
               - yrList[]           : years (e.g. [2000, 20001, ...], matches yr_enum in 2D Array
               - 2D Structured Array: [yr_enum, day_enum][obs] : year x day x observation
 
-            Gui is structured as 2 Rows or tkinter Widgets:
+            Gui is structured as 2 Rows of tkinter Widgets:
               - row-0 : imported guiPlot Widget, colspan must be set to match # of col in row-1
               - row-1 : c0: info, c1: ArgSelFrame, c5: ObserMenu, c6: TypeButton
 
@@ -45,7 +45,7 @@ class guiMain(tk.Tk):
         self._station_index = self._stations.index(self._ClimateDataObj.station)
 
         # Initial Gui Setup
-        self.title("Climate Data Analyzer")
+        self.title(f'Climate Data Analyzer {app_ver}')
         self.geometry('+{}+{}'.format(*self._posXY))
         self._style = guiStyle(self)                  # Style for all Widgets!
 

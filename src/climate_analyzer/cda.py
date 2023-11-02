@@ -351,7 +351,7 @@ def main():
             upd_yrList = [_yr + 1 for _yr in upd_yrs]
             cdObj = ClimateDataObj(dbDir, upd_yrList, station_dict, noaaObj)
 
-            gui = guiMain(cdObj, (800, 100))  # Gui Setup
+            gui = guiMain(cdObj, (800, 100), __version__)  # Gui Setup
             gui.mainloop()
             
 

@@ -1,4 +1,9 @@
 """  Support for Matplotlib Integration with tkinter
+     MatplotLib doesn't provide a clean / stripped down interface to imbed in tkinter.
+     In order to provide a 'generic' interface, it provides an 'Aggregate' API.
+     Unfortunately, the MatplotLib backend_tkagg wants control of events.
+
+     This is an ugly solution and a maintenance headache.  But better than the alternative.
 """
 import math
 import uuid
@@ -8,6 +13,7 @@ import tkinter as tk
 from matplotlib.backends import _tkagg
 from matplotlib.backend_bases import FigureCanvasBase
 from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.backend_bases import ResizeEvent
 
 _blit_args = {}
 # Initialize to a non-empty string that is not a Tcl command
@@ -78,7 +84,6 @@ def blit(photoimage, aggimage, offsets, bbox=None):
         photoimage.tk.call(_blit_tcl_name, argsid)
 
 class FigureCanvasTk(FigureCanvasAgg, FigureCanvasBase):
-
     def __init__(self, figure=None, master=None, resize_callback=None):
         super().__init__(figure)
 
@@ -91,6 +96,10 @@ class FigureCanvasTk(FigureCanvasAgg, FigureCanvasBase):
             width=w, height=h, borderwidth=0, highlightthickness=0)
         self._tkphoto = tk.PhotoImage(
             master=self._tkcanvas, width=w, height=h)
+        
+        self._tkcanvas_image_region = self._tkcanvas.create_image(
+            w//2, h//2, image=self._tkphoto)
+
         self._tkcanvas.create_image(w//2, h//2, image=self._tkphoto)
         self._tkcanvas.focus_set()
         self._first_resize = True   #This is a very ugly fix but works!
@@ -116,12 +125,19 @@ class FigureCanvasTk(FigureCanvasAgg, FigureCanvasBase):
         hinch = height / dpival
         self.figure.set_size_inches(winch, hinch, forward=True)
 
-        self._tkcanvas.delete(self._tkphoto)
-        self._tkphoto = tk.PhotoImage(
-            master=self._tkcanvas, width=int(width), height=int(height))
-        self._tkcanvas.create_image(
+        self._tkcanvas.delete(self._tkcanvas_image_region)
+        self._tkphoto.configure(width=int(width), height=int(height))
+        self._tkcanvas_image_region = self._tkcanvas.create_image(
             int(width / 2), int(height / 2), image=self._tkphoto)
-        self.resize_event()
+        ResizeEvent("resize_event", self)._process()
+        self.draw_idle()
+
+        # self._tkcanvas.delete(self._tkphoto)
+        # self._tkphoto = tk.PhotoImage(
+        #     master=self._tkcanvas, width=int(width), height=int(height))
+        # self._tkcanvas.create_image(
+        #     int(width / 2), int(height / 2), image=self._tkphoto)
+        # self.resize_event()
 
     def xunits2pts(self, axis):
         figsize_points = self._figure.get_figwidth() * 72

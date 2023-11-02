@@ -28,7 +28,7 @@ Config data is kept in cda.ini, also stored in pythonXX\Lib\site-packages.
 #### --token [access-token]
 Set the <access-token> used by climate_analyzer when connecting to NOAA's
 Web Services.  The <access-token> is a 32-character alpha-numeric and can be
-obtained from here here: https://www.ncdc.noaa.gov/cdo-web/token
+obtained from here: https://www.ncdc.noaa.gov/cdo-web/token
 This, and other configuration parameters are stored in
 ..\site-packages\climate_analyzer\cda.ini.
 

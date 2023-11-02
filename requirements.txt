@@ -1,4 +1,4 @@
-haversine==2.7.0
-matplotlib==3.5.1
-numpy==1.23.5
-requests==2.26.0
+haversine==2.8.0
+matplotlib>=3.8.1
+numpy>=1.26.1
+requests>=2.31.0

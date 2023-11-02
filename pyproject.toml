@@ -13,7 +13,7 @@ authors = [
 ]
 description = "Download & Analyze NOAA Climate Data"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.11"
 
 dependencies = [
     "haversine>=2.7.0",
