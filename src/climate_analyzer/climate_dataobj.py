@@ -1,4 +1,6 @@
 """
+
+
 Climate Data Abstraction and Formating Class
 """
 from datetime import date
@@ -9,7 +11,7 @@ from collections import namedtuple
 from calendar import month_abbr
 from itertools import groupby, accumulate
 from .noaa import NOAA
-from .db_coupler import dbCoupler, DBTYPE_CDO
+from .db_coupler import dbCoupler, DBTYPE_CDO, CD_NODATE_NPDT
 
 import logging
 import os
@@ -145,6 +147,8 @@ class ClimateDataObj:
 
         self._stationList = []
         if updYrList:
+            # print('-------', updYrList)
+
             for _fpath in dbFileList:
                 station_alias = os.path.splitext(os.path.basename(_fpath))[0]
                 try:
@@ -382,20 +386,28 @@ class ClimateDataObj:
 
             # ddict[name+'_avg'] = np.nanmean(np_data)
             # ddict[name+'_stdev'] = np.nanstd(np_data)
-        obsList = []
-        for _nparray in obs:
-            goodIndx = np.argwhere(~np.isnan(_nparray))
-            y = _nparray[goodIndx].flatten()
-            x = goodIndx.flatten()
-            obsList.append(np.stack((x, y), axis=1).astype(np.float32))  # (M x 1, M x 1) -> M x 2
-        if len(obsList) == 1:
-            ddict['obs'] = obsList[0]
-        elif len(obsList) == 2:
-            ptStack = np.stack(obsList)  # (M x 2, M x 2) -> 2 x M x 2
+
+        # Very Ugly & Confusing, Precip Data is 1xM, Temp Data is 2xM
+        good_indx = [np.argwhere(~np.isnan(_nparray)).flatten() for _nparray in obs]
+        if len(good_indx) > 1:
+            good_indx = np.intersect1d(*good_indx)
+        else:
+            good_indx = good_indx[0]
+
+        good_data = [_nparray[good_indx] for _nparray in obs]
+        good_obs = [np.stack((good_indx, y), axis=1) for y in good_data]
+
+        if len(good_obs) == 1:
+            ddict['obs'] = good_obs[0]
+
+        elif len(good_obs) == 2:
+            ptStack = np.stack(good_obs)  # (M x 2, M x 2) -> 2 x M x 2
             ddict['obs'] = np.swapaxes(ptStack, 0, 1)  # 2 x M x 2      -> M x 2 x 2
+        else:
+            raise ValueError
         return ddict
 
-    def update_db(self, station, dbFilePath, webAccessObj, upd_yrs):
+    def update_db(self, station: STATION_T, dbFilePath, webAccessObj, upd_yrs):
         """
          Scan for Climate DataBase Files in updateDir, and then check each for missing data.
          If missing data is found, attempt Download from NOAA & Update DB.
@@ -417,6 +429,7 @@ class ClimateDataObj:
             yrList.append(date.today().year)
 
         # Loop Over All Years, climate data is 2D array of records [yrs, days]
+        # !! It is possible that Climate data Needs to add a New Year !!
         stationStatusDict = {}
         for _chkyear in upd_yrs:
             _yrenum = yrList.index(_chkyear)
@@ -427,6 +440,17 @@ class ClimateDataObj:
             new_vals = None
 
             # Find db rows with ANY missing data
+            # print(_yrenum, type(np_climate_data), np_climate_data.shape)
+            if np_climate_data.shape[0] <= _yrenum:
+                new_cd = np.full((1, 366), np.nan, dtype = np_climate_data.dtype)
+                np_climate_data = np.vstack((np_climate_data, new_cd))
+
+                # print(np_climate_data.dtype)
+                # print(new_cd.shape)
+                # print(new_cd.dtype)
+                # print(upd_cd.shape)
+                # raise ValueError
+
             void = [np.any([np.isnan(x) for x in y]) for y in np_climate_data[_yrenum, :]]
             isnan_grpsize = [(_k, sum(1 for _ in _v)) for _k, _v in groupby(void)]
             isnan_dayenum = [0] + list(accumulate([x[1] for x in isnan_grpsize]))
@@ -456,6 +480,9 @@ class ClimateDataObj:
 
                     if new_vals is None:
                         new_vals = webAccessObj.get_dataset_v1(station.id, date(_chkyear, 1, 1))
+                        if new_vals is None:
+                            print('--- webAccess Failed!')
+                            break
 
                     missingDate = date(_chkyear, *dayInt2MMDD(dayenum))
                     while True:

@@ -205,6 +205,8 @@ class guiPlot(FigureCanvasTk):
 
         rtnDict = {'date':  '-'.join([str(x) for x in mdy])}
 
+        # print('---', self._obs)
+
         obs = self._plty['obs']
         obs_x = obs[:,0].astype(np.int32)
         try:

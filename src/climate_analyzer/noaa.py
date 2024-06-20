@@ -165,8 +165,8 @@ class NOAA():
 
     def get_dataset_v1(self, station_id, start):
         """ NOAA has TWO API's to Retrieve Historical Climate Data - Daily (HCDD):
-            V1 - non-jason capatible, returns values as line delimited text
-            V2 - jason capatible but fails to return values for Jan & Feb
+            V1 - non-json capatible, returns values as line delimited text
+            V2 - json capatible but fails to return values for Jan & Feb
 
             The station_id is used to query NOAA's Climate Data Online Web-Site for
             its Daily-Summary Values for all years and days that it is available.

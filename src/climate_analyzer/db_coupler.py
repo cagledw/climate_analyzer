@@ -17,8 +17,8 @@ import array
 import sqlite3
 import numpy as np
 
-from datetime import date
-from typing import List
+# from datetime import date
+from typing import List, Dict
 from collections import namedtuple
 
 # Climate Data Observation
@@ -127,7 +127,7 @@ class dbCoupler:
         self.cursor = None
         self.dbFileName  = None
 
-    def rd_climate_data(self):
+    def rd_climate_data(self) -> (List[int], np.ndarray, Dict[int, tuple]):
         """ Read Climate Data from SQLite DB & return as (LIST_OF_YRS,NUMPY_2D_Array)
             NUMPY_2D is structured as [yr, day_of_yr] of dtype CD_NODATE_NPDT
         """
@@ -214,6 +214,10 @@ class dbCoupler:
     def add_climate_data(self, tblname, tblitemlist):
         """ add rows to an existing table, fail on overwrite of existing key
         """
+        if tblname not in self.table_names:
+            cmd = dbCoupler.newTableCmd(tblname, self.DBDEF_CDO)
+            self.cursor.execute(cmd)
+
         cmd = dbCoupler.wrRowCmd(tblname, self.DBCMD_CDO)
 
         for _rowid, row in enumerate(tblitemlist):
